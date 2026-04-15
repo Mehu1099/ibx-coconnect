@@ -1,26 +1,65 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: #0B1D3A;
+  --color-foreground: #FDF6EC;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: system-ui, -apple-system, sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ── Continuous ambient grid animation ────────────────────────────────────── */
+.ambient-grid-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  animation: gridDraw var(--grid-dur, 6s) ease-in-out var(--grid-delay, 0s) infinite;
+  will-change: stroke-dashoffset, opacity;
 }
+
+@keyframes gridDraw {
+  0%   { stroke-dashoffset: 1;   opacity: 0; }
+  8%   { stroke-dashoffset: 0.8; opacity: 0.35; }
+  45%  { stroke-dashoffset: 0;   opacity: 0.3; }
+  75%  { stroke-dashoffset: 0;   opacity: 0.1; }
+  100% { stroke-dashoffset: 0;   opacity: 0; }
+}
+
+/* ── Button hover effects ─────────────────────────────────────────────────── */
+.btn-explore {
+  background: #1ABFAD;
+  color: #0B1D3A;
+  border-radius: 9999px;
+  padding: 14px 32px;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+.btn-explore:hover {
+  background: #F47560;
+  transform: scale(1.02);
+}
+
+.btn-portal {
+  background: transparent;
+  border: 1.5px solid #FDF6EC;
+  color: #FDF6EC;
+  border-radius: 9999px;
+  padding: 14px 32px;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+.btn-portal:hover {
+  border-color: #F47560;
+  color: #F47560;
+  background: rgba(244, 117, 96, 0.1);
+  transform: scale(1.02);
+}
+
+
