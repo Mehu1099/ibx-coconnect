@@ -33,7 +33,10 @@ export default function LocationPin({ location, index }: Props) {
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{
-        delay: 4.5 + index * 0.1,
+        // 7.3s = intro typing (1.2) + hold (1.0) + fade (0.6) + line 1 (2.0)
+        // + line 2 (2.0) + ~0.5 cursor blink. Keeps pins appearing right
+        // after the welcome sequence wraps up.
+        delay: 7.3 + index * 0.1,
         duration: 0.5,
         ease: "easeOut",
       }}

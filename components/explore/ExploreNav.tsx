@@ -1,6 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
+import { useState } from "react";
 
 const NAV_LINKS: { label: string; href: string; active?: boolean }[] = [
   { label: "Explore", href: "/explore", active: true },
@@ -9,6 +11,8 @@ const NAV_LINKS: { label: string; href: string; active?: boolean }[] = [
 ];
 
 export default function ExploreNav() {
+  const [titleHovered, setTitleHovered] = useState(false);
+
   return (
     <nav
       className="fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-between px-6 border-b"
@@ -19,17 +23,23 @@ export default function ExploreNav() {
         borderColor: "#E0DCD4",
       }}
     >
-      <div
-        className="font-semibold"
-        style={{
-          fontFamily: "var(--font-space-grotesk)",
-          color: "#0B1D3A",
-          fontSize: 18,
-          fontWeight: 600,
-        }}
-      >
-        IBX Co-Connect
-      </div>
+      <Link href="/" style={{ textDecoration: "none" }}>
+        <motion.span
+          onMouseEnter={() => setTitleHovered(true)}
+          onMouseLeave={() => setTitleHovered(false)}
+          animate={{ color: titleHovered ? "#F47560" : "#0B1D3A" }}
+          transition={{ duration: 0.25, ease: "easeInOut" }}
+          style={{
+            display: "inline-block",
+            cursor: "pointer",
+            fontFamily: "var(--font-space-grotesk)",
+            fontSize: 18,
+            fontWeight: 600,
+          }}
+        >
+          IBX Co-Connect
+        </motion.span>
+      </Link>
 
       <motion.div
         className="flex items-center gap-8"

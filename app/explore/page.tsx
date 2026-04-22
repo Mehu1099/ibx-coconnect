@@ -16,21 +16,24 @@ export default function ExplorePage() {
   return (
     <main
       className="relative w-screen h-screen overflow-hidden"
-      style={{ background: "#F5F2EB" }}
+      style={{ background: "#EDE5D5" }}
     >
-      {/* Axonometric map fills the viewport */}
+      {/* Axonometric map. Warm cream bg shows through while the image
+          loads, so there's no white flash. Fade-in is cosmetic — the
+          page is usable from frame one. */}
       <motion.div
         ref={imageContainerRef}
         className="absolute inset-0"
         style={{ zIndex: 0, cursor: adminMode ? "crosshair" : "default" }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 1.5, ease: "easeOut" }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/explore/axonometric-base.jpg"
           alt="Axonometric map of the neighborhood"
+          fetchPriority="high"
           style={{
             width: "100%",
             height: "100%",
@@ -42,34 +45,24 @@ export default function ExplorePage() {
         />
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ background: "rgba(245, 242, 235, 0.1)" }}
+          style={{ background: "rgba(237, 229, 213, 0.1)" }}
         />
 
-        {/* Glowing dot traveling along the IBX transit line. Sits above
-            the image (via its own z-index: 10) and below the pins (z-20). */}
         <IBXLineAnimation />
 
-        {/* Pins — rendered inside the image container so their %-based
-            positioning matches the admin tool's coordinate system */}
         {!adminMode &&
           EXPLORE_LOCATIONS.map((loc, i) => (
             <LocationPin key={loc.id} location={loc} index={i} />
           ))}
       </motion.div>
 
-      {/* Admin tool lives outside the image container so its own UI
-          clicks don't bubble into the image click handler. Its absolute
-          markers use %s relative to <main>, which is the same size as
-          the image container (both fill the viewport). */}
       <PinAdminTool
         imageContainerRef={imageContainerRef}
         onAdminModeChange={setAdminMode}
       />
 
-      {/* Top nav (above map) */}
       <ExploreNav />
 
-      {/* Welcome text (above map) */}
       <WelcomeText />
     </main>
   );

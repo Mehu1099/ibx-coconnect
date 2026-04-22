@@ -1,14 +1,25 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #0B1D3A;
+  --color-background: #EDE5D5;
   --color-foreground: #FDF6EC;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
+/* Warm cream at the DOM root so there is never a white flash at any
+   layer the browser paints before/between React trees. The landing
+   page paints its own navy on top via a full-viewport motion.div; the
+   explore page paints cream on top. Between them, the browser itself
+   shows cream. */
+html,
 body {
-  background: var(--color-background);
+  background-color: #EDE5D5;
+  margin: 0;
+  padding: 0;
+}
+
+body {
   color: var(--color-foreground);
   font-family: system-ui, -apple-system, sans-serif;
 }

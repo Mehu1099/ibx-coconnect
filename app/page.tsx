@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import * as d3 from "d3";
 import type { FeatureCollection } from "geojson";
 
@@ -240,6 +241,16 @@ export default function Home() {
   const [geo, setGeo] = useState<FeatureCollection | null>(null);
   const [phase, setPhase] = useState(0);
   const [skip, setSkip] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
+  const router = useRouter();
+
+  const handleExplore = useCallback(() => {
+    if (transitioning) return;
+    setTransitioning(true);
+    // Fade-out window before route change. Warm cream is the DOM root
+    // bg (globals.css), so there's no white flash during the swap.
+    setTimeout(() => router.push("/explore"), 500);
+  }, [transitioning, router]);
 
   // ── Measure viewport ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -477,9 +488,14 @@ export default function Home() {
   // ═══════════════════════════════════ Render ════════════════════════════════
 
   return (
-    <div
+    <motion.div
       className="relative w-screen h-screen overflow-hidden"
-      style={{ background: C.navy }}
+      style={{ backgroundColor: C.navy }}
+      initial={false}
+      animate={{
+        backgroundColor: transitioning ? "#EDE5D5" : C.navy,
+      }}
+      transition={{ duration: 0.5, ease: "easeInOut" }}
     >
       {/* ── Star field ─────────────────────────────────────────────────── */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
@@ -501,11 +517,13 @@ export default function Home() {
 
       {/* ── SVG Map ────────────────────────────────────────────────────── */}
       {proj && (
-        <svg
+        <motion.svg
           className="absolute inset-0"
           width={dims.w}
           height={dims.h}
           viewBox={`0 0 ${dims.w} ${dims.h}`}
+          animate={{ opacity: transitioning ? 0 : 1 }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
         >
           {/* Zoom container — uses CSS transition for reliable SVG transforms */}
           <g
@@ -744,7 +762,7 @@ export default function Home() {
               </motion.text>
             )}
           </g>
-        </svg>
+        </motion.svg>
       )}
 
       {/* ── Phase 4: Dark overlay (map + grid visible through it) ──────── */}
@@ -753,8 +771,11 @@ export default function Home() {
           className="absolute inset-0 z-10"
           style={{ background: "rgba(0,0,0,0.38)" }}
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: dur(1), ease: "easeOut" }}
+          animate={{ opacity: transitioning ? 0 : 1 }}
+          transition={{
+            duration: transitioning ? 0.5 : dur(1),
+            ease: "easeOut",
+          }}
         />
       )}
 
@@ -766,25 +787,34 @@ export default function Home() {
           animate={{ opacity: 1 }}
           transition={{ duration: dur(0.5), delay: 0.2 }}
         >
-          <motion.h1
-            className="text-center"
-            style={{
-              color: C.cream,
-              fontSize: mobile ? 40 : 56,
-              fontFamily: "var(--font-space-grotesk), system-ui, sans-serif",
-              fontWeight: 600,
-              letterSpacing: "-0.03em",
-            }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: dur(0.8),
-              delay: skip ? 0.3 : 0.3,
-              ease: "easeOut",
-            }}
-          >
-            IBX Co-Connect
-          </motion.h1>
+          {/* Centered title — only rendered while NOT transitioning.
+              When the button is clicked, this unmounts and a matching
+              layoutId element mounts at the top-left; framer-motion
+              animates the bounding box between the two positions. */}
+          {!transitioning && (
+            <motion.h1
+              layoutId="ibx-title"
+              className="text-center"
+              style={{
+                color: C.cream,
+                fontSize: mobile ? 40 : 56,
+                fontFamily: "var(--font-space-grotesk), system-ui, sans-serif",
+                fontWeight: 600,
+                letterSpacing: "-0.03em",
+                margin: 0,
+                lineHeight: 1.2,
+              }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                duration: dur(0.8),
+                delay: skip ? 0.3 : 0.3,
+                ease: "easeOut",
+              }}
+            >
+              IBX Co-Connect
+            </motion.h1>
+          )}
 
           <motion.p
             className="mt-4 text-center max-w-lg"
@@ -796,12 +826,16 @@ export default function Home() {
               letterSpacing: "0",
             }}
             initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: dur(0.8),
-              delay: skip ? 0.4 : 0.6,
-              ease: "easeOut",
-            }}
+            animate={{ opacity: transitioning ? 0 : 1, y: 0 }}
+            transition={
+              transitioning
+                ? { duration: 0.5, ease: "easeOut" }
+                : {
+                    duration: dur(0.8),
+                    delay: skip ? 0.4 : 0.6,
+                    ease: "easeOut",
+                  }
+            }
           >
             Community-driven planning for the Interborough Express
           </motion.p>
@@ -809,14 +843,22 @@ export default function Home() {
           <motion.div
             className="mt-8 flex flex-col sm:flex-row gap-4"
             initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: dur(0.8),
-              delay: skip ? 0.5 : 1.0,
-              ease: "easeOut",
-            }}
+            animate={{ opacity: transitioning ? 0 : 1, y: 0 }}
+            transition={
+              transitioning
+                ? { duration: 0.5, ease: "easeOut" }
+                : {
+                    duration: dur(0.8),
+                    delay: skip ? 0.5 : 1.0,
+                    ease: "easeOut",
+                  }
+            }
           >
-            <button className="btn-explore cursor-pointer">
+            <button
+              className="btn-explore cursor-pointer"
+              onClick={handleExplore}
+              disabled={transitioning}
+            >
               Explore the Platform
             </button>
             <button className="btn-portal cursor-pointer">
@@ -824,6 +866,50 @@ export default function Home() {
             </button>
           </motion.div>
         </motion.div>
+      )}
+
+      {/* ── Transitioning title (top-left) — mounts when the button is
+             clicked. Shares layoutId="ibx-title" with the centered h1,
+             so framer-motion interpolates the bbox between the two
+             positions. The wrapper mimics the explore nav layout (h-14,
+             px-6, flex items-center) so the text lands at the exact
+             same pixel position as the explore nav title. ───────────── */}
+      {phase >= 4 && transitioning && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 56,
+            display: "flex",
+            alignItems: "center",
+            padding: "0 24px",
+            zIndex: 40,
+            pointerEvents: "none",
+          }}
+        >
+          <motion.div
+            layoutId="ibx-title"
+            style={{
+              fontFamily: "var(--font-space-grotesk), system-ui, sans-serif",
+              fontWeight: 600,
+              fontSize: 18,
+              letterSpacing: "-0.03em",
+              color: C.cream,
+              margin: 0,
+              lineHeight: 1.2,
+              whiteSpace: "nowrap",
+            }}
+            animate={{ color: "#0B1D3A" }}
+            transition={{
+              layout: { duration: 0.5, ease: [0.4, 0, 0.2, 1] },
+              color: { duration: 0.5, ease: "easeInOut" },
+            }}
+          >
+            IBX Co-Connect
+          </motion.div>
+        </div>
       )}
 
       {/* ── Skip button ────────────────────────────────────────────────── */}
@@ -840,6 +926,6 @@ export default function Home() {
           Skip &rarr;
         </motion.button>
       )}
-    </div>
+    </motion.div>
   );
 }

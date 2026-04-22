@@ -105,7 +105,10 @@ export default function IBXLineAnimation() {
         headSize={14}
         trailLength={12}
         duration={8}
-        startDelay={0}
+        // 7.0s lines the comet up with the welcome sequence: starts
+        // right as line 2 finishes typing, a hair before the pins
+        // appear at 7.3s.
+        startDelay={7}
         brightness={1.0}
       />
     </div>

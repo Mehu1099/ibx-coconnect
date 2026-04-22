@@ -33,6 +33,17 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} h-full antialiased`}
     >
+      <head>
+        {/* Preload the axonometric on every page entry so the browser
+            has it cached before the user ever triggers a transition.
+            fetchPriority="high" bumps it above deferred resources. */}
+        <link
+          rel="preload"
+          as="image"
+          href="/explore/axonometric-base.jpg"
+          fetchPriority="high"
+        />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
