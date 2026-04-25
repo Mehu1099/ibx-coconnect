@@ -90,7 +90,15 @@ const Comet = memo(function Comet({
   );
 });
 
-export default function IBXLineAnimation() {
+type IBXLineAnimationProps = {
+  /** When true, comet starts immediately (used when returning to the
+   *  page from a child route — the welcome sequence is skipped). */
+  instant?: boolean;
+};
+
+export default function IBXLineAnimation({
+  instant = false,
+}: IBXLineAnimationProps = {}) {
   return (
     <div
       aria-hidden
@@ -107,8 +115,8 @@ export default function IBXLineAnimation() {
         duration={8}
         // 7.0s lines the comet up with the welcome sequence: starts
         // right as line 2 finishes typing, a hair before the pins
-        // appear at 7.3s.
-        startDelay={7}
+        // appear at 7.3s. instant=true short-circuits to 0.
+        startDelay={instant ? 0 : 7}
         brightness={1.0}
       />
     </div>

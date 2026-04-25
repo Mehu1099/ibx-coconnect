@@ -7,12 +7,20 @@ import type { ExploreLocation } from "@/lib/explore-locations";
 type Props = {
   location: ExploreLocation;
   index: number;
+  onSelect?: (location: ExploreLocation) => void;
+  /** Skip the staggered fade-in (used when returning from a child page). */
+  instant?: boolean;
 };
 
 const PIN_DIAMETER = 52;
 const NEAR_TOP_THRESHOLD = 15;
 
-export default function LocationPin({ location, index }: Props) {
+export default function LocationPin({
+  location,
+  index,
+  onSelect,
+  instant = false,
+}: Props) {
   const [hovered, setHovered] = useState(false);
   const labelBelow = location.y < NEAR_TOP_THRESHOLD;
 
@@ -30,23 +38,25 @@ export default function LocationPin({ location, index }: Props) {
         border: "none",
         padding: 0,
       }}
-      initial={{ opacity: 0, scale: 0.8 }}
+      initial={instant ? false : { opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{
-        // 7.3s = intro typing (1.2) + hold (1.0) + fade (0.6) + line 1 (2.0)
-        // + line 2 (2.0) + ~0.5 cursor blink. Keeps pins appearing right
-        // after the welcome sequence wraps up.
-        delay: 7.3 + index * 0.1,
-        duration: 0.5,
-        ease: "easeOut",
-      }}
+      transition={
+        instant
+          ? { duration: 0 }
+          : {
+              // 7.3s = intro typing (1.2) + hold (1.0) + fade (0.6)
+              // + line 1 (2.0) + line 2 (2.0) + ~0.5 cursor blink.
+              // Pins land right after the welcome sequence wraps up.
+              delay: 7.3 + index * 0.1,
+              duration: 0.5,
+              ease: "easeOut",
+            }
+      }
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onFocus={() => setHovered(true)}
       onBlur={() => setHovered(false)}
-      onClick={() => {
-        console.log(`Clicked: ${location.label}`);
-      }}
+      onClick={() => onSelect?.(location)}
       aria-label={`${location.label}: ${location.category}`}
     >
       {/* Sonar-ping ring — starts at the outer edge of the visible pin

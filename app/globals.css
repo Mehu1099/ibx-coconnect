@@ -41,6 +41,35 @@ body {
   100% { stroke-dashoffset: 0;   opacity: 0; }
 }
 
+/* ── Animated conic-gradient border (toolbar) ────────────────────────────── */
+/* Uses CSS @property so the angle CSS variable becomes interpolatable —
+   without it, conic-gradient(from var(--angle), ...) won't animate.
+   Browser support: Chrome 85+, Safari 16.4+, Firefox 128+. In older
+   Firefox the border still renders at 0deg (graceful static fallback). */
+@property --border-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rotate-border {
+  to {
+    --border-angle: 360deg;
+  }
+}
+
+.toolbar-conic-border {
+  background: conic-gradient(
+    from var(--border-angle),
+    #1abfad,
+    #f47560,
+    #1abfad,
+    #f47560,
+    #1abfad
+  );
+  animation: rotate-border 6s linear infinite;
+}
+
 /* ── Button hover effects ─────────────────────────────────────────────────── */
 .btn-explore {
   background: #1ABFAD;

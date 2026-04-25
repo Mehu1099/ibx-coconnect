@@ -22,11 +22,20 @@ type Phase =
   | "hold"
   | "fade";
 
-export default function WelcomeText() {
-  const [phase, setPhase] = useState<Phase>("intro-typing");
+type Props = {
+  /** Skip the typewriter sequence and render the final two-line state. */
+  instant?: boolean;
+};
+
+export default function WelcomeText({ instant = false }: Props) {
+  // instant=true skips the typewriter phase machine entirely: phase
+  // starts at "fade" (each phase effect early-returns) and the line
+  // text is pre-filled to its final value so the two-line block
+  // renders complete on first paint.
+  const [phase, setPhase] = useState<Phase>(instant ? "fade" : "intro-typing");
   const [introText, setIntroText] = useState("");
-  const [line1, setLine1] = useState("");
-  const [line2, setLine2] = useState("");
+  const [line1, setLine1] = useState(instant ? LINE_1 : "");
+  const [line2, setLine2] = useState(instant ? LINE_2 : "");
   const [cursorVisible, setCursorVisible] = useState(true);
 
   // Intro typewriter

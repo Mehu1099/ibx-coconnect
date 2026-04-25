@@ -10,6 +10,17 @@ const NAV_LINKS: { label: string; href: string; active?: boolean }[] = [
   { label: "Analyze", href: "#" },
 ];
 
+// Clearing the explore session flag on navigation back to "/" means the
+// next visit to /explore from the landing page replays the full intro.
+// Stays in sessionStorage so the flag naturally clears on tab close too.
+function clearExploreAnimatedFlag() {
+  try {
+    window.sessionStorage.removeItem("ibx-explore-animated");
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function ExploreNav() {
   const [titleHovered, setTitleHovered] = useState(false);
 
@@ -23,7 +34,11 @@ export default function ExploreNav() {
         borderColor: "#E0DCD4",
       }}
     >
-      <Link href="/" style={{ textDecoration: "none" }}>
+      <Link
+        href="/"
+        onClick={clearExploreAnimatedFlag}
+        style={{ textDecoration: "none" }}
+      >
         <motion.span
           onMouseEnter={() => setTitleHovered(true)}
           onMouseLeave={() => setTitleHovered(false)}
