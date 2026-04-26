@@ -8,8 +8,11 @@ type Props = {
   onBack: () => void;
 };
 
-const PILL_BG = "rgba(255, 255, 255, 0.92)";
-const PILL_BG_HOVER = "rgba(255, 255, 255, 0.98)";
+// Solid (not translucent) so we can drop backdrop-filter — these small
+// pills don't need real blur to read against the photo, and the filter
+// is a major Safari paint cost.
+const PILL_BG = "#FFFFFF";
+const PILL_BG_HOVER = "#FFFFFF";
 
 export default function LocationTopNav({ label, subtitle, onBack }: Props) {
   return (
@@ -23,10 +26,8 @@ export default function LocationTopNav({ label, subtitle, onBack }: Props) {
           top: 24,
           left: 24,
           background: PILL_BG,
-          backdropFilter: "blur(14px)",
-          WebkitBackdropFilter: "blur(14px)",
           padding: "10px 18px",
-          border: "1px solid rgba(255, 255, 255, 0.6)",
+          border: "1px solid #E0DCD4",
           boxShadow: "0 4px 20px rgba(11, 29, 58, 0.10)",
           color: "#0B1D3A",
           fontFamily: "var(--font-space-grotesk)",
@@ -67,10 +68,8 @@ export default function LocationTopNav({ label, subtitle, onBack }: Props) {
           top: 24,
           right: 24,
           background: PILL_BG,
-          backdropFilter: "blur(14px)",
-          WebkitBackdropFilter: "blur(14px)",
           padding: "10px 18px",
-          border: "1px solid rgba(255, 255, 255, 0.6)",
+          border: "1px solid #E0DCD4",
           boxShadow: "0 4px 20px rgba(11, 29, 58, 0.10)",
           fontFamily: "var(--font-space-grotesk)",
           fontSize: 13,

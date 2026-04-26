@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
+// import FPSCounter from "@/components/dev/FPSCounter";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -44,7 +45,10 @@ export default function RootLayout({
           fetchPriority="high"
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* <FPSCounter /> */}
+      </body>
     </html>
   );
 }

@@ -178,7 +178,9 @@ function ToolButton({
         onBlur={onLeave}
         aria-label={tool.label}
         aria-pressed={active}
-        className="flex items-center justify-center cursor-pointer"
+        className={`flex items-center justify-center cursor-pointer${
+          isPulsing ? " tool-active-pulse" : ""
+        }`}
         style={{
           width: 40,
           height: 40,
@@ -188,15 +190,9 @@ function ToolButton({
           color: iconColor,
           opacity: buttonOpacity,
           padding: 0,
-          willChange: "transform",
         }}
-        animate={isPulsing ? { scale: [1, 1.06, 1] } : { scale: 1 }}
-        transition={
-          isPulsing
-            ? { duration: 2, repeat: Infinity, ease: "easeInOut" }
-            : { duration: 0.2, ease: "easeOut" }
-        }
         whileHover={{ scale: 1.1 }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
       >
         {tool.icon}
       </motion.button>
@@ -252,38 +248,51 @@ export default function LocationToolbar({
         zIndex: tutorialHighlight ? 110 : 40,
       }}
     >
+      {/* Tutorial step 2 — separate aura sibling behind the toolbar.
+          Animating scale + opacity is GPU-composited; the previous
+          box-shadow keyframes were forcing a paint every frame at 60fps
+          for the entire viewport-wide shadow. */}
+      {tutorialHighlight && (
+        <motion.div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: -8,
+            borderRadius: 22,
+            background: "rgba(244, 117, 96, 0.5)",
+            pointerEvents: "none",
+            willChange: "transform, opacity",
+          }}
+          initial={{ scale: 1, opacity: 0.6 }}
+          animate={{ scale: 1.12, opacity: 0 }}
+          transition={{
+            duration: 1.8,
+            repeat: Infinity,
+            ease: "easeOut",
+          }}
+        />
+      )}
+
       {/* Conic-gradient border ring. The .toolbar-conic-border class
           wires up @property --border-angle + the rotate animation in
           globals.css so the gradient appears to spin slowly. */}
       <motion.div
-        className="toolbar-conic-border"
+        className="toolbar-conic-border relative"
         style={{
           padding: 2,
           borderRadius: 16,
-          willChange: "transform, opacity, box-shadow",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.12), 0 -8px 32px rgba(0,0,0,0.06)",
         }}
         initial={{ opacity: 0, y: 24 }}
         animate={{
           opacity: 1,
           y: 0,
           scale: tutorialHighlight ? 1.02 : 1,
-          // When the tutorial is on step 2, breathe a coral aura ring.
-          // When idle, no extra shadow (the conic gradient does the
-          // "alive" job on its own).
-          boxShadow: tutorialHighlight
-            ? [
-                "0 0 0 2px rgba(244, 117, 96, 0.7), 0 0 32px 12px rgba(244, 117, 96, 0.4)",
-                "0 0 0 2px rgba(244, 117, 96, 0.7), 0 0 48px 20px rgba(244, 117, 96, 0)",
-              ]
-            : "0 8px 32px rgba(0,0,0,0.12), 0 -8px 32px rgba(0,0,0,0.06)",
         }}
         transition={{
           opacity: { duration: 0.4, ease: "easeOut", delay: 0.1 },
           y: { duration: 0.4, ease: "easeOut", delay: 0.1 },
           scale: { duration: 0.3, ease: "easeOut" },
-          boxShadow: tutorialHighlight
-            ? { duration: 1.8, repeat: Infinity, ease: "easeOut" }
-            : { duration: 0.3, ease: "easeOut" },
         }}
       >
         <div
@@ -291,8 +300,8 @@ export default function LocationToolbar({
           style={{
             background:
               "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,255,255,0.92) 100%)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
             padding: 8,
             borderRadius: 14,
             gap: 4,

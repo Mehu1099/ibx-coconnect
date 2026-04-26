@@ -2,14 +2,21 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ExploreNav from "@/components/explore/ExploreNav";
 import IBXLineAnimation from "@/components/explore/IBXLineAnimation";
 import LocationPin from "@/components/explore/LocationPin";
 import PinAdminTool from "@/components/explore/PinAdminTool";
 import WelcomeText from "@/components/explore/WelcomeText";
 import { getConcernCountByLocation } from "@/lib/annotations-api";
-import { EXPLORE_LOCATIONS, type ExploreLocation } from "@/lib/explore-locations";
+import {
+  AXONOMETRIC_NATURAL_HEIGHT,
+  AXONOMETRIC_NATURAL_WIDTH,
+  EXPLORE_LOCATIONS,
+  IBX_ROUTE_WAYPOINTS,
+  type ExploreLocation,
+} from "@/lib/explore-locations";
+import { useImageProjection } from "@/lib/use-image-projection";
 
 const SESSION_FLAG = "ibx-explore-animated";
 // Total length of the welcome sequence (intro + lines + pin stagger).
@@ -31,6 +38,7 @@ export default function ExplorePage() {
   // { locationId → count }, hydrated from Supabase. Empty object until
   // the fetch resolves; pins render with 0 (badge hidden) in the meantime.
   const [concernCounts, setConcernCounts] = useState<Record<string, number>>({});
+  const [isMobilePortrait, setIsMobilePortrait] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -43,6 +51,23 @@ export default function ExplorePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical hydration-safe sessionStorage read
     if (skip) setInstant(true);
     setMounted(true);
+  }, []);
+
+  // Mobile portrait detection — drives a focused/zoomed framing of the
+  // axonometric so pins land in the visible window on small screens.
+  useEffect(() => {
+    function check() {
+      const isMobile = window.innerWidth < 768;
+      const isPortrait = window.innerHeight > window.innerWidth;
+      setIsMobilePortrait(isMobile && isPortrait);
+    }
+    check();
+    window.addEventListener("resize", check);
+    window.addEventListener("orientationchange", check);
+    return () => {
+      window.removeEventListener("resize", check);
+      window.removeEventListener("orientationchange", check);
+    };
   }, []);
 
   // Fire-and-forget. Errors are console-logged inside the helper; if
@@ -90,17 +115,45 @@ export default function ExplorePage() {
     [leaving, router],
   );
 
+  // Project natural-image % to container px. With cover at desktop the
+  // image fills the viewport (cropped on whichever axis is the longer
+  // one). On mobile portrait we zoom 1.5× and slide the focus toward
+  // the south-east quadrant (Brooklyn College area) so the most relevant
+  // part of the neighborhood lands in-frame.
+  const projection = useImageProjection(
+    imageContainerRef,
+    AXONOMETRIC_NATURAL_WIDTH,
+    AXONOMETRIC_NATURAL_HEIGHT,
+    "cover",
+    isMobilePortrait ? 1.5 : 1,
+    isMobilePortrait ? 60 : 50,
+    isMobilePortrait ? 70 : 50,
+  );
+
+  // Pre-project pin positions whenever the projection changes. Memoizing
+  // here means LocationPin's `screenX/screenY` props are referentially
+  // stable across unrelated parent re-renders (e.g. concernCounts
+  // hydrating), so the memo'd pin doesn't re-render either.
+  const projectedPins = useMemo(() => {
+    if (!projection) return [];
+    return EXPLORE_LOCATIONS.map((loc) => {
+      const p = projection.projectPin(loc.x, loc.y);
+      return { loc, screenX: p.x, screenY: p.y, visible: p.visible };
+    });
+  }, [projection]);
+
   return (
     <main
       className="relative w-screen h-screen overflow-hidden"
       style={{ background: "#EDE5D5" }}
     >
-      {/* Axonometric map. Warm cream bg shows through while the image
-          loads, so there's no white flash. Fade-in is cosmetic — the
-          page is usable from frame one. */}
+      {/* Viewport-sized container. The axonometric is positioned in
+          absolute pixels (computed by the projection hook) so we can
+          track the rendered image bounds precisely under object-fit:
+          cover and apply a mobile zoom + focus shift. */}
       <motion.div
         ref={imageContainerRef}
-        className="absolute inset-0"
+        className="absolute inset-0 overflow-hidden"
         style={{ zIndex: 0, cursor: adminMode ? "crosshair" : "default" }}
         // Same initial on server and client so SSR HTML matches first
         // client render. The 0.8s fade-in plays on every entry — fine
@@ -110,53 +163,70 @@ export default function ExplorePage() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/explore/axonometric-base.jpg"
-          alt="Axonometric map of the neighborhood"
-          fetchPriority="high"
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-            userSelect: "none",
-          }}
-          draggable={false}
-        />
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: "rgba(237, 229, 213, 0.1)" }}
-        />
+        {projection && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/explore/axonometric-base.jpg"
+              alt="Axonometric map of the neighborhood"
+              fetchPriority="high"
+              style={{
+                position: "absolute",
+                left: `${projection.imageScreenX}px`,
+                top: `${projection.imageScreenY}px`,
+                width: `${projection.imageScreenWidth}px`,
+                height: `${projection.imageScreenHeight}px`,
+                maxWidth: "none",
+                display: "block",
+                userSelect: "none",
+              }}
+              draggable={false}
+            />
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{ background: "rgba(237, 229, 213, 0.1)" }}
+            />
+          </>
+        )}
 
-        {/* Animation-bearing children are gated on `mounted` so they
-            never render server-side. They mount once with the correct
-            `instant` value (read from sessionStorage in the effect),
-            so each child's lazy-state initializers fire correctly and
-            no prop-driven re-render is needed mid-animation. */}
-        {mounted && <IBXLineAnimation instant={instant} />}
+        {/* Animation-bearing children are gated on `mounted` AND a
+            ready projection so they never render before we know where
+            the image lands. */}
+        {mounted && projection && (
+          <IBXLineAnimation
+            instant={instant}
+            waypoints={IBX_ROUTE_WAYPOINTS}
+            projection={projection}
+          />
+        )}
 
         {mounted && !adminMode &&
-          EXPLORE_LOCATIONS.map((loc, i) => (
-            <LocationPin
-              key={loc.id}
-              location={loc}
-              index={i}
-              onSelect={handlePinSelect}
-              instant={instant}
-              concernCount={concernCounts[loc.id] ?? 0}
-            />
-          ))}
+          projectedPins.map((p, i) => {
+            if (!p.visible) return null;
+            return (
+              <LocationPin
+                key={p.loc.id}
+                location={p.loc}
+                index={i}
+                screenX={p.screenX}
+                screenY={p.screenY}
+                onSelect={handlePinSelect}
+                instant={instant}
+                concernCount={concernCounts[p.loc.id] ?? 0}
+              />
+            );
+          })}
       </motion.div>
 
       <PinAdminTool
         imageContainerRef={imageContainerRef}
+        projection={projection}
         onAdminModeChange={setAdminMode}
       />
 
       <ExploreNav />
 
-      {mounted && <WelcomeText instant={instant} />}
+      {mounted && <WelcomeText instant={instant} isMobilePortrait={isMobilePortrait} />}
 
       {/* White fade-out when navigating into a location page. The
           destination paints its own white bg and fades the photo in,

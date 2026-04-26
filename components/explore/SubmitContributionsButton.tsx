@@ -15,59 +15,69 @@ export default function SubmitContributionsButton({ count, onClick }: Props) {
   return (
     <AnimatePresence>
       {count > 0 && (
-        <motion.button
+        <motion.div
           key="submit-contributions"
-          type="button"
-          onClick={onClick}
-          className="fixed flex items-center gap-2 cursor-pointer rounded-full"
+          className="fixed"
+          // Centering via motion's `x` motion-style so framer composes
+          // it into the same transform pipeline as `y`. Using inline
+          // `transform: translateX(-50%)` here would get clobbered
+          // every time motion writes its own transform for `y`,
+          // leaving the button visibly off-centre.
           style={{
-            // Centering via motion's `x` motion-style so framer composes
-            // it into the same transform pipeline as `y`. Using inline
-            // `transform: translateX(-50%)` here would get clobbered
-            // every time motion writes its own transform for `y` /
-            // `scale`, leaving the button visibly off-centre.
             bottom: 110,
             left: "50%",
             x: "-50%",
             zIndex: 25,
-            background: "#F47560",
-            color: "#FFFFFF",
-            border: "none",
-            padding: "12px 22px",
-            fontFamily: "var(--font-space-grotesk)",
-            fontSize: 13,
-            fontWeight: 600,
-            letterSpacing: "0.2px",
-            lineHeight: 1,
-            willChange: "transform, box-shadow",
           }}
           initial={{ opacity: 0, y: 20 }}
-          animate={{
-            opacity: 1,
-            y: 0,
-            // Continuous outward coral aura on a 2s loop. Pure
-            // box-shadow so it's GPU-friendly and doesn't reflow.
-            boxShadow: [
-              "0 4px 20px rgba(244, 117, 96, 0.40), 0 0 0 0 rgba(244, 117, 96, 0.60)",
-              "0 4px 20px rgba(244, 117, 96, 0.40), 0 0 0 16px rgba(244, 117, 96, 0)",
-            ],
-          }}
+          animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
-          transition={{
-            opacity: { duration: 0.4, ease: "easeOut" },
-            y: { duration: 0.4, ease: "easeOut" },
-            boxShadow: {
-              duration: 2,
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        >
+          {/* Aura sibling — GPU-composited scale + opacity. The old
+              box-shadow keyframes painted a viewport-wide shadow region
+              every frame, which showed up in the perf profile. */}
+          <motion.div
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: -4,
+              borderRadius: 9999,
+              background: "rgba(244, 117, 96, 0.45)",
+              pointerEvents: "none",
+              willChange: "transform, opacity",
+            }}
+            initial={{ scale: 1, opacity: 0.45 }}
+            animate={{ scale: 1.2, opacity: 0 }}
+            transition={{
+              duration: 3,
               repeat: Infinity,
               ease: "easeOut",
               delay: 0.3,
-            },
-          }}
-          whileHover={{
-            scale: 1.05,
-            transition: { duration: 0.18 },
-          }}
-        >
+            }}
+          />
+
+          <motion.button
+            type="button"
+            onClick={onClick}
+            className="relative flex items-center gap-2 cursor-pointer rounded-full"
+            style={{
+              background: "#F47560",
+              color: "#FFFFFF",
+              border: "none",
+              padding: "12px 22px",
+              fontFamily: "var(--font-space-grotesk)",
+              fontSize: 13,
+              fontWeight: 600,
+              letterSpacing: "0.2px",
+              lineHeight: 1,
+              boxShadow: "0 4px 20px rgba(244, 117, 96, 0.40)",
+            }}
+            whileHover={{
+              scale: 1.05,
+              transition: { duration: 0.18 },
+            }}
+          >
           <span
             aria-hidden
             className="rounded-full flex items-center justify-center"
@@ -100,6 +110,7 @@ export default function SubmitContributionsButton({ count, onClick }: Props) {
             <polyline points="12 5 19 12 12 19" />
           </svg>
         </motion.button>
+        </motion.div>
       )}
     </AnimatePresence>
   );

@@ -1,3 +1,11 @@
+// Natural dimensions of /public/explore/axonometric-base.jpg.
+// Pin and route coordinates below are 0–100 percentages of these
+// natural dimensions, NOT of the on-screen container. See
+// useImageProjection for how those % map to screen pixels under
+// object-fit: cover (with optional mobile zoom + focus point).
+export const AXONOMETRIC_NATURAL_WIDTH = 5460;
+export const AXONOMETRIC_NATURAL_HEIGHT = 3072;
+
 export type ExploreLocation = {
   id: string;
   label: string;
@@ -7,6 +15,19 @@ export type ExploreLocation = {
   x: number;
   y: number;
 };
+
+// IBX route waypoints in natural-image %. Used by IBXLineAnimation,
+// projected to screen pixels at every viewport size.
+export const IBX_ROUTE_WAYPOINTS: { x: number; y: number }[] = [
+  { x: 79.6, y: 45 },
+  { x: 74.7, y: 51.4 },
+  { x: 67.7, y: 59.8 },
+  { x: 62.1, y: 67 },
+  { x: 54.5, y: 76.1 },
+  { x: 49.8, y: 81.9 },
+  { x: 45.2, y: 87.4 },
+  { x: 36.6, y: 97.6 },
+];
 
 export const EXPLORE_LOCATIONS: ExploreLocation[] = [
   {

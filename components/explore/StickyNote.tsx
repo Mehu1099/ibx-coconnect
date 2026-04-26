@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
 const CORAL = "#F47560";
 const TEAL = "#1ABFAD";
@@ -33,7 +33,7 @@ type DotProps = {
   onUpdate: (content: string) => void;
 };
 
-export function StickyNoteDot({
+function StickyNoteDotInner({
   annotation,
   index,
   selected,
@@ -55,31 +55,35 @@ export function StickyNoteDot({
         zIndex: selected ? 35 : 30,
       }}
     >
-      {/* Shimmer ring — faint coral pulse, staggered so neighbours don't
-          beat in sync. Pure transform/opacity → GPU composited. */}
-      <motion.div
-        aria-hidden
-        className="absolute pointer-events-none rounded-full"
-        style={{
-          left: "50%",
-          top: "50%",
-          width: 14,
-          height: 14,
-          marginLeft: -7,
-          marginTop: -7,
-          border: `2px solid ${CORAL}`,
-          willChange: "transform, opacity",
-        }}
-        initial={{ scale: 1, opacity: 0.5 }}
-        animate={{ scale: 2.2, opacity: 0 }}
-        transition={{
-          duration: 2.4,
-          repeat: Infinity,
-          repeatDelay: 0.6,
-          ease: "easeOut",
-          delay: (index % 4) * 0.7,
-        }}
-      />
+      {/* Shimmer ring — only animates while the dot is hovered. Continuous
+          ambient shimmer was running ~N animations indefinitely across
+          the page; gating on hover means zero per-frame cost in the
+          common case. */}
+      {hovered && (
+        <motion.div
+          key={`shimmer-${index}`}
+          aria-hidden
+          className="absolute pointer-events-none rounded-full"
+          style={{
+            left: "50%",
+            top: "50%",
+            width: 14,
+            height: 14,
+            marginLeft: -7,
+            marginTop: -7,
+            border: `2px solid ${CORAL}`,
+            willChange: "transform, opacity",
+          }}
+          initial={{ scale: 1, opacity: 0.5 }}
+          animate={{ scale: 2.2, opacity: 0 }}
+          transition={{
+            duration: 1.6,
+            repeat: Infinity,
+            repeatDelay: 0.6,
+            ease: "easeOut",
+          }}
+        />
+      )}
 
       <motion.button
         type="button"
@@ -127,6 +131,10 @@ export function StickyNoteDot({
     </div>
   );
 }
+
+// Memoized so unrelated parent state changes (active tool, toast, etc.)
+// don't re-render every dot and re-fire its mount-spring animation.
+export const StickyNoteDot = memo(StickyNoteDotInner);
 
 // Inner card: editing state lives here so it resets every time the card
 // mounts (i.e. when selected/hovered toggles or the dot is re-selected).

@@ -25,9 +25,15 @@ type Phase =
 type Props = {
   /** Skip the typewriter sequence and render the final two-line state. */
   instant?: boolean;
+  /** Mobile portrait — anchor text near the bottom (out of the way of
+   *  cropped image edges) and use smaller type. */
+  isMobilePortrait?: boolean;
 };
 
-export default function WelcomeText({ instant = false }: Props) {
+export default function WelcomeText({
+  instant = false,
+  isMobilePortrait = false,
+}: Props) {
   // instant=true skips the typewriter phase machine entirely: phase
   // starts at "fade" (each phase effect early-returns) and the line
   // text is pre-filled to its final value so the two-line block
@@ -145,16 +151,29 @@ export default function WelcomeText({ instant = false }: Props) {
       />
     ) : null;
 
-  return (
-    <div
-      className="absolute z-30 select-none"
-      style={{
+  // Mobile portrait: anchor text to the bottom (away from the cropped
+  // top of the axonometric) and shrink type so the two lines fit
+  // comfortably above the toolbar/CTA stack.
+  const containerStyle: React.CSSProperties = isMobilePortrait
+    ? {
+        left: 20,
+        right: 20,
+        bottom: 120,
+        fontFamily: "var(--font-space-grotesk)",
+        color: "#0B1D3A",
+      }
+    : {
         left: 48,
         top: 100,
         fontFamily: "var(--font-space-grotesk)",
         color: "#0B1D3A",
-      }}
-    >
+      };
+
+  const headlineSize = isMobilePortrait ? 24 : 36;
+  const subSize = isMobilePortrait ? 18 : 32;
+
+  return (
+    <div className="absolute z-30 select-none" style={containerStyle}>
       <AnimatePresence>
         {introMounted && (
           <motion.div
@@ -163,7 +182,7 @@ export default function WelcomeText({ instant = false }: Props) {
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: INTRO_FADE_MS / 1000, ease: "easeOut" }}
             style={{
-              fontSize: 36,
+              fontSize: headlineSize,
               fontWeight: 600,
               lineHeight: 1.2,
               minHeight: "1.2em",
@@ -183,7 +202,7 @@ export default function WelcomeText({ instant = false }: Props) {
         >
           <div
             style={{
-              fontSize: 36,
+              fontSize: headlineSize,
               fontWeight: 600,
               lineHeight: 1.2,
               minHeight: "1.2em",
@@ -194,7 +213,7 @@ export default function WelcomeText({ instant = false }: Props) {
           </div>
           <div
             style={{
-              fontSize: 32,
+              fontSize: subSize,
               fontWeight: 400,
               lineHeight: 1.3,
               marginTop: 4,

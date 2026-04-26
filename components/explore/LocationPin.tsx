@@ -1,12 +1,17 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ExploreLocation } from "@/lib/explore-locations";
 
 type Props = {
   location: ExploreLocation;
   index: number;
+  /** Container-pixel position of the pin's center, computed by the
+   *  projection hook. The parent re-projects on resize so pins track
+   *  the rendered image under object-fit: cover + mobile zoom/focus. */
+  screenX: number;
+  screenY: number;
   onSelect?: (location: ExploreLocation) => void;
   /** Skip the staggered fade-in (used when returning from a child page). */
   instant?: boolean;
@@ -17,9 +22,11 @@ type Props = {
 const PIN_DIAMETER = 52;
 const NEAR_TOP_THRESHOLD = 15;
 
-export default function LocationPin({
+function LocationPinInner({
   location,
   index,
+  screenX,
+  screenY,
   onSelect,
   instant = false,
   concernCount = 0,
@@ -38,8 +45,8 @@ export default function LocationPin({
         // would get clobbered every time framer wrote its transform
         // during the scale animation, leaving each pin offset by half
         // its size and the sonar ring visibly wobbling around it.
-        left: `${location.x}%`,
-        top: `${location.y}%`,
+        left: `${screenX}px`,
+        top: `${screenY}px`,
         x: "-50%",
         y: "-50%",
         width: PIN_DIAMETER,
@@ -69,25 +76,17 @@ export default function LocationPin({
       onClick={() => onSelect?.(location)}
       aria-label={`${location.label}: ${location.category}`}
     >
-      {/* Sonar-ping ring — starts at the outer edge of the visible pin
-          (which extends 6px beyond the 52px photo via the box-shadow
-          halo) and expands outward. Only scale + opacity animate, so
-          this is fully GPU-composited at 60fps. */}
-      <motion.div
+      {/* Sonar-ping ring — pure CSS animation runs on the compositor
+          thread, no JS work per frame. Staggered by index via
+          animation-delay so at most 1–2 of the 8 pins pulse at a time
+          (CSS keyframes defined in app/globals.css). */}
+      <div
         aria-hidden
-        className="absolute rounded-full pointer-events-none"
+        className="absolute rounded-full pointer-events-none pin-sonar-pulse"
         style={{
           inset: -6,
           border: "2px solid #00C4A7",
-          willChange: "transform, opacity",
-        }}
-        initial={{ scale: 1, opacity: 0.5 }}
-        animate={{ scale: 1.8, opacity: 0 }}
-        transition={{
-          duration: 2,
-          ease: [0.4, 0, 0.2, 1],
-          repeat: Infinity,
-          delay: index * 0.25,
+          animationDelay: `${index * 0.7}s`,
         }}
       />
 
@@ -225,3 +224,21 @@ export default function LocationPin({
     </motion.button>
   );
 }
+
+// Custom comparator — re-render only when something the pin actually
+// renders against has changed. concernCounts hydrating elsewhere on
+// the page no longer triggers a pin re-render unless THIS pin's count
+// changed. screenX/Y change on resize but the parent memoizes them so
+// they're referentially stable across unrelated re-renders.
+const LocationPin = memo(LocationPinInner, (prev, next) => {
+  return (
+    prev.screenX === next.screenX &&
+    prev.screenY === next.screenY &&
+    prev.location.id === next.location.id &&
+    prev.concernCount === next.concernCount &&
+    prev.instant === next.instant &&
+    prev.index === next.index &&
+    prev.onSelect === next.onSelect
+  );
+});
+export default LocationPin;

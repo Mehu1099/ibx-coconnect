@@ -1,16 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ImageProjection } from "@/lib/use-image-projection";
 
 type Coord = { x: number; y: number };
 
 type Props = {
   imageContainerRef: React.RefObject<HTMLDivElement | null>;
+  /** Used to reverse-project a click in container pixels back to
+   *  natural-image %, which is the coordinate system stored in
+   *  lib/explore-locations.ts. */
+  projection: ImageProjection | null;
   onAdminModeChange?: (adminMode: boolean) => void;
 };
 
 export default function PinAdminTool({
   imageContainerRef,
+  projection,
   onAdminModeChange,
 }: Props) {
   const [adminMode, setAdminMode] = useState(false);
@@ -54,15 +60,22 @@ export default function PinAdminTool({
   useEffect(() => {
     if (!adminMode) return;
     const el = imageContainerRef.current;
-    if (!el) return;
+    if (!el || !projection) return;
 
+    // Reverse the projection: container click → natural-image %.
+    // (xPercent / 100) * imageScreenWidth + imageScreenX = clickX
+    // ⇒ xPercent = ((clickX - imageScreenX) / imageScreenWidth) * 100
     const handleClick = (e: MouseEvent) => {
       const rect = el.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 100;
-      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+      const xPercent =
+        ((clickX - projection.imageScreenX) / projection.imageScreenWidth) * 100;
+      const yPercent =
+        ((clickY - projection.imageScreenY) / projection.imageScreenHeight) * 100;
       const clamped: Coord = {
-        x: Math.max(0, Math.min(100, Number(x.toFixed(1)))),
-        y: Math.max(0, Math.min(100, Number(y.toFixed(1)))),
+        x: Math.max(0, Math.min(100, Number(xPercent.toFixed(1)))),
+        y: Math.max(0, Math.min(100, Number(yPercent.toFixed(1)))),
       };
       setLastClick(clamped);
       setCoords((prev) => [...prev, clamped]);
@@ -70,7 +83,7 @@ export default function PinAdminTool({
 
     el.addEventListener("click", handleClick);
     return () => el.removeEventListener("click", handleClick);
-  }, [adminMode, imageContainerRef]);
+  }, [adminMode, imageContainerRef, projection]);
 
   const handleCopyAll = useCallback(async () => {
     const text = coords
@@ -93,46 +106,54 @@ export default function PinAdminTool({
 
   return (
     <>
-      {/* Transient teal marker at each clicked coord */}
-      {adminMode &&
-        coords.map((c, i) => (
-          <div
-            key={i}
-            className="absolute z-20 pointer-events-none rounded-full"
-            style={{
-              left: `${c.x}%`,
-              top: `${c.y}%`,
-              transform: "translate(-50%, -50%)",
-              width: 14,
-              height: 14,
-              background: "#1ABFAD",
-              border: "2px solid #FFFFFF",
-              boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-            }}
-          />
-        ))}
+      {/* Transient teal marker at each clicked coord. Coords are stored
+          in natural-image %, so we project to container px before rendering
+          (otherwise the markers drift on resize). */}
+      {adminMode && projection &&
+        coords.map((c, i) => {
+          const p = projection.projectPin(c.x, c.y);
+          return (
+            <div
+              key={i}
+              className="absolute z-20 pointer-events-none rounded-full"
+              style={{
+                left: `${p.x}px`,
+                top: `${p.y}px`,
+                transform: "translate(-50%, -50%)",
+                width: 14,
+                height: 14,
+                background: "#1ABFAD",
+                border: "2px solid #FFFFFF",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+              }}
+            />
+          );
+        })}
 
       {/* Floating coord card near most recent click */}
-      {adminMode && lastClick && (
-        <div
-          className="absolute z-30 pointer-events-none rounded-lg"
-          style={{
-            left: `${lastClick.x}%`,
-            top: `${lastClick.y}%`,
-            transform: "translate(12px, 12px)",
-            background: "#0B1D3A",
-            color: "#F5F2EB",
-            padding: "6px 10px",
-            fontFamily: "var(--font-space-grotesk)",
-            fontSize: 12,
-            fontWeight: 500,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          x: {lastClick.x}%, y: {lastClick.y}%
-        </div>
-      )}
+      {adminMode && projection && lastClick && (() => {
+        const p = projection.projectPin(lastClick.x, lastClick.y);
+        return (
+          <div
+            className="absolute z-30 pointer-events-none rounded-lg"
+            style={{
+              left: `${p.x}px`,
+              top: `${p.y}px`,
+              transform: "translate(12px, 12px)",
+              background: "#0B1D3A",
+              color: "#F5F2EB",
+              padding: "6px 10px",
+              fontFamily: "var(--font-space-grotesk)",
+              fontSize: 12,
+              fontWeight: 500,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            x: {lastClick.x}%, y: {lastClick.y}%
+          </div>
+        );
+      })()}
 
       {/* Bottom-left info panel */}
       {adminMode && (

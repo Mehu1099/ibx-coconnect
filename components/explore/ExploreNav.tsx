@@ -28,9 +28,9 @@ export default function ExploreNav() {
     <nav
       className="fixed top-0 left-0 right-0 z-40 h-14 flex items-center justify-between px-6 border-b"
       style={{
-        background: "rgba(255, 255, 255, 0.85)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
+        background: "rgba(255, 255, 255, 0.92)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
         borderColor: "#E0DCD4",
       }}
     >

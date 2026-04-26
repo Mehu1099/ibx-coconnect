@@ -8,7 +8,10 @@ type Props = {
   questions: number;
 };
 
-const PILL_BG = "rgba(255, 255, 255, 0.96)";
+// Solid (not translucent) so we can drop backdrop-filter — these small
+// pills don't need real blur to read against the photo, and the filter
+// is a major Safari paint cost.
+const PILL_BG = "#FFFFFF";
 
 function CounterPill({
   count,
@@ -28,16 +31,13 @@ function CounterPill({
       className="flex items-center gap-2 rounded-full"
       style={{
         background: PILL_BG,
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
         padding: "8px 14px",
-        border: "1px solid rgba(255, 255, 255, 0.6)",
+        border: "1px solid #E0DCD4",
         boxShadow: "0 4px 16px rgba(11, 29, 58, 0.10)",
         fontFamily: "var(--font-space-grotesk)",
         fontSize: 12,
         color: "#0B1D3A",
         whiteSpace: "nowrap",
-        willChange: "transform, box-shadow",
       }}
       whileHover={{
         scale: 1.05,
@@ -52,11 +52,10 @@ function CounterPill({
           height: 8,
           borderRadius: "50%",
           background: dotColor,
-          willChange: "opacity",
         }}
         animate={{ opacity: [1, 0.7, 1] }}
         transition={{
-          duration: 2,
+          duration: 4,
           repeat: Infinity,
           ease: "easeInOut",
           delay: breathDelay,
