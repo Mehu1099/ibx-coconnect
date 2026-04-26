@@ -33,6 +33,17 @@ type DotProps = {
   onUpdate: (content: string) => void;
 };
 
+// Marker geometry. Outer white ring 30px, inner coral 24px, centered
+// white dot 8px (submitted only — drafts use a dashed inner border to
+// signal "not yet saved" without an extra glyph).
+const MARKER_OUTER = 30;
+const MARKER_INNER = 24;
+const MARKER_DOT = 8;
+const SHADOW =
+  "0 0 0 1px rgba(255,255,255,0.5), 0 3px 12px rgba(11, 29, 58, 0.3)";
+const SHADOW_HOVER =
+  "0 0 0 1px rgba(255,255,255,0.6), 0 6px 20px rgba(11, 29, 58, 0.4)";
+
 function StickyNoteDotInner({
   annotation,
   index,
@@ -43,7 +54,9 @@ function StickyNoteDotInner({
   onUpdate,
 }: DotProps) {
   const [hovered, setHovered] = useState(false);
-  const showCard = hovered || selected;
+  // Selected → full edit/delete card. Hover → small read-only preview
+  // (only when not selected, so the two never stack).
+  const showHoverPreview = hovered && !selected && !!annotation.content;
 
   return (
     <div
@@ -55,35 +68,23 @@ function StickyNoteDotInner({
         zIndex: selected ? 35 : 30,
       }}
     >
-      {/* Shimmer ring — only animates while the dot is hovered. Continuous
-          ambient shimmer was running ~N animations indefinitely across
-          the page; gating on hover means zero per-frame cost in the
-          common case. */}
-      {hovered && (
-        <motion.div
-          key={`shimmer-${index}`}
-          aria-hidden
-          className="absolute pointer-events-none rounded-full"
-          style={{
-            left: "50%",
-            top: "50%",
-            width: 14,
-            height: 14,
-            marginLeft: -7,
-            marginTop: -7,
-            border: `2px solid ${CORAL}`,
-            willChange: "transform, opacity",
-          }}
-          initial={{ scale: 1, opacity: 0.5 }}
-          animate={{ scale: 2.2, opacity: 0 }}
-          transition={{
-            duration: 1.6,
-            repeat: Infinity,
-            repeatDelay: 0.6,
-            ease: "easeOut",
-          }}
-        />
-      )}
+      {/* Shimmer ring — CSS-driven keyframes (compositor thread).
+          --shimmer-delay staggers per index so multiple markers feel
+          alive without beating in sync. */}
+      <div
+        aria-hidden
+        className="sticky-shimmer absolute pointer-events-none rounded-full"
+        style={{
+          left: "50%",
+          top: "50%",
+          width: MARKER_OUTER,
+          height: MARKER_OUTER,
+          marginLeft: -MARKER_OUTER / 2,
+          marginTop: -MARKER_OUTER / 2,
+          border: `2px solid ${CORAL}`,
+          ["--shimmer-delay" as string]: `${(index % 8) * 0.5}s`,
+        }}
+      />
 
       <motion.button
         type="button"
@@ -94,16 +95,16 @@ function StickyNoteDotInner({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         aria-label={isDraft ? "Sticky note (draft)" : "Sticky note"}
-        className="block cursor-pointer relative"
+        className="block cursor-pointer relative flex items-center justify-center"
         style={{
-          width: 14,
-          height: 14,
+          width: MARKER_OUTER,
+          height: MARKER_OUTER,
           borderRadius: "50%",
-          background: CORAL,
-          border: isDraft ? "2px dashed #FFFFFF" : "2px solid #FFFFFF",
-          boxShadow: "0 2px 6px rgba(11, 29, 58, 0.25)",
+          background: "#FFFFFF",
+          border: "none",
+          boxShadow: hovered ? SHADOW_HOVER : SHADOW,
           padding: 0,
-          opacity: isDraft ? 0.85 : 1,
+          transition: "box-shadow 0.2s ease-out",
         }}
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -114,14 +115,92 @@ function StickyNoteDotInner({
           delay: index * 0.05,
         }}
         whileHover={{ scale: 1.15 }}
-      />
+      >
+        {/* Inner coral disc. Drafts use 75% opacity + dashed white
+            border so they read as "pending" at a glance. */}
+        <span
+          aria-hidden
+          className="flex items-center justify-center rounded-full"
+          style={{
+            width: MARKER_INNER,
+            height: MARKER_INNER,
+            background: isDraft ? "rgba(244, 117, 96, 0.75)" : CORAL,
+            border: isDraft ? "2px dashed #FFFFFF" : "none",
+            boxSizing: "border-box",
+          }}
+        >
+          {/* Centered white dot — submitted notes only. Drafts skip
+              this so the dashed border is the dominant feature. */}
+          {!isDraft && (
+            <span
+              aria-hidden
+              className="rounded-full"
+              style={{
+                width: MARKER_DOT,
+                height: MARKER_DOT,
+                background: "#FFFFFF",
+              }}
+            />
+          )}
+        </span>
+      </motion.button>
 
+      {/* Read-only hover preview — small content card with a
+          downward-pointing arrow. Only appears when NOT selected; the
+          fuller NoteCard with edit/delete takes over on click. */}
       <AnimatePresence>
-        {showCard && (
+        {showHoverPreview && (
+          <motion.div
+            key="hover-preview"
+            className="absolute pointer-events-none"
+            style={{
+              left: "50%",
+              bottom: "calc(100% + 12px)",
+              transform: "translateX(-50%)",
+              background: "#FFFFFF",
+              padding: "10px 14px",
+              borderRadius: 10,
+              maxWidth: 240,
+              minWidth: 120,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+              fontFamily: "var(--font-space-grotesk)",
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: NAVY,
+              whiteSpace: "normal",
+              wordBreak: "break-word",
+              zIndex: 50,
+            }}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+          >
+            {annotation.content}
+            <span
+              aria-hidden
+              style={{
+                position: "absolute",
+                bottom: -5,
+                left: "50%",
+                transform: "translateX(-50%) rotate(45deg)",
+                width: 10,
+                height: 10,
+                background: "#FFFFFF",
+                boxShadow: "2px 2px 4px rgba(0,0,0,0.04)",
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Selected → full card with edit/delete. */}
+      <AnimatePresence>
+        {selected && (
           <NoteCard
-            key={`card-${selected ? "selected" : "hover"}`}
+            key="selected-card"
             content={annotation.content ?? ""}
-            selected={selected}
+            selected
             isDraft={isDraft}
             onDelete={onDelete}
             onUpdate={onUpdate}
@@ -352,22 +431,36 @@ export function StickyNoteComposer({ x, y, onSave, onCancel }: ComposerProps) {
       }}
       onClick={(e) => e.stopPropagation()}
     >
-      {/* Pin marker for the in-progress note */}
+      {/* Pin marker for the in-progress note. Same layered geometry
+          as StickyNoteDot so the visual transitions seamlessly from
+          composer → saved-draft. */}
       <div
         aria-hidden
+        className="flex items-center justify-center rounded-full"
         style={{
           position: "absolute",
           left: "50%",
           top: "50%",
           transform: "translate(-50%, -50%)",
-          width: 14,
-          height: 14,
-          borderRadius: "50%",
-          background: CORAL,
-          border: "2px solid #FFFFFF",
-          boxShadow: "0 2px 6px rgba(11, 29, 58, 0.25)",
+          width: MARKER_OUTER,
+          height: MARKER_OUTER,
+          background: "#FFFFFF",
+          boxShadow:
+            "0 0 0 1px rgba(255,255,255,0.5), 0 3px 12px rgba(11, 29, 58, 0.3)",
         }}
-      />
+      >
+        <span
+          aria-hidden
+          className="rounded-full"
+          style={{
+            width: MARKER_INNER,
+            height: MARKER_INNER,
+            background: "rgba(244, 117, 96, 0.75)",
+            border: "2px dashed #FFFFFF",
+            boxSizing: "border-box",
+          }}
+        />
+      </div>
 
       <motion.div
         style={{

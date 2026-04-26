@@ -117,13 +117,32 @@ body {
   50%      { transform: scale(1.06); }
 }
 
+/* ── Sticky-note shimmer (CSS, slow + staggered) ──────────────────────────── */
+/* Continuous coral pulse expanding outward from each marker. The 4s
+   period + per-marker --shimmer-delay stagger keeps the page feeling
+   "alive" without all markers beating in sync. Pure scale + opacity
+   on a sibling pseudo, so it stays on the compositor thread. */
+.sticky-shimmer {
+  animation: sticky-shimmer 4s ease-out infinite;
+  animation-delay: var(--shimmer-delay, 0s);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+@keyframes sticky-shimmer {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  70%  { transform: scale(1.9); opacity: 0;   }
+  100% { transform: scale(2);   opacity: 0;   }
+}
+
 /* ── Reduced motion: kill ambient loops, keep meaningful transitions ──────── */
 @media (prefers-reduced-motion: reduce) {
   .ambient-grid-line,
   .pin-sonar-pulse,
   .ibx-comet-particle,
   .tool-active-pulse,
-  .toolbar-conic-border {
+  .toolbar-conic-border,
+  .sticky-shimmer {
     animation: none !important;
   }
   *, *::before, *::after {

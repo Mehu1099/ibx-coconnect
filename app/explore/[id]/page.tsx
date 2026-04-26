@@ -11,6 +11,7 @@ import LocationToolbar, {
   type ToolId,
 } from "@/components/explore/LocationToolbar";
 import LocationTopNav from "@/components/explore/LocationTopNav";
+import PersonalCanvasHint from "@/components/explore/PersonalCanvasHint";
 import {
   StickyNoteComposer,
   StickyNoteDot,
@@ -500,6 +501,19 @@ export default function LocationPage() {
       <SubmitContributionsButton
         count={draftCount}
         onClick={() => setSubmissionModalOpen(true)}
+      />
+
+      {/* ── Personal-canvas hint (zero-contribution state) ──────────────── */}
+      {/* Sits in the same slot as the Submit button. The two are mutually
+          exclusive: hint requires zero of everything, button requires
+          draftCount > 0, so they never overlap on screen. */}
+      <PersonalCanvasHint
+        show={
+          submittedAnnotations.length === 0 &&
+          submittedResponses.length === 0 &&
+          draftAnnotations.length === 0 &&
+          draftResponses.length === 0
+        }
       />
 
       {/* ── Demographic submission modal ────────────────────────────────── */}

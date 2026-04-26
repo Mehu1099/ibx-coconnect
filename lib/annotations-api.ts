@@ -45,12 +45,22 @@ export interface SubmittedRow {
 
 export async function loadAnnotations(
   locationId: string,
+  // The location photo page is a PRIVATE canvas — each user only sees
+  // their own contributions. The future Engage page will pass false
+  // to load everyone's annotations for the public collective view.
+  filterByCurrentUser: boolean = true,
 ): Promise<DatabaseAnnotation[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("annotations")
     .select("*")
     .eq("location_id", locationId)
     .order("created_at", { ascending: true });
+
+  if (filterByCurrentUser) {
+    query = query.eq("anonymous_session_id", getAnonymousSessionId());
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("Error loading annotations:", error);
@@ -122,12 +132,20 @@ export async function deleteAnnotation(
 
 export async function loadQuestionResponses(
   locationId: string,
+  // Same private-by-default contract as loadAnnotations.
+  filterByCurrentUser: boolean = true,
 ): Promise<DatabaseQuestionResponse[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("question_responses")
     .select("*")
     .eq("location_id", locationId)
     .order("created_at", { ascending: false });
+
+  if (filterByCurrentUser) {
+    query = query.eq("anonymous_session_id", getAnonymousSessionId());
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error("Error loading responses:", error);
