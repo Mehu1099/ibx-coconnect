@@ -4,12 +4,21 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    "Missing Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY).",
+  // Defensive: don't throw at module evaluation. Throwing breaks the
+  // Vercel build (and any other env that statically analyses imports)
+  // before there's a chance to surface a useful message. Log loudly
+  // and fall back to placeholders so the build completes; any actual
+  // Supabase call at runtime will fail with a network error that the
+  // helpers in annotations-api.ts already catch and console.error.
+  console.error(
+    "[IBX Co-Connect] Missing Supabase environment variables. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your .env.local (locally) or Vercel project settings (production).",
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(
+  supabaseUrl || "https://placeholder.supabase.co",
+  supabaseAnonKey || "placeholder-key",
+);
 
 const SESSION_KEY = "ibx-anon-session-id";
 
