@@ -10,6 +10,8 @@ type Props = {
   onSelect?: (location: ExploreLocation) => void;
   /** Skip the staggered fade-in (used when returning from a child page). */
   instant?: boolean;
+  /** Number of concerns logged at this location. 0 hides the badge. */
+  concernCount?: number;
 };
 
 const PIN_DIAMETER = 52;
@@ -20,6 +22,7 @@ export default function LocationPin({
   index,
   onSelect,
   instant = false,
+  concernCount = 0,
 }: Props) {
   const [hovered, setHovered] = useState(false);
   const labelBelow = location.y < NEAR_TOP_THRESHOLD;
@@ -29,11 +32,18 @@ export default function LocationPin({
       type="button"
       className="absolute z-20 cursor-pointer"
       style={{
+        // Centering via motion-style x/y so framer composes them into
+        // its own transform alongside `scale` (entrance) and any future
+        // animated transforms. Inline `transform: translate(-50%, -50%)`
+        // would get clobbered every time framer wrote its transform
+        // during the scale animation, leaving each pin offset by half
+        // its size and the sonar ring visibly wobbling around it.
         left: `${location.x}%`,
         top: `${location.y}%`,
+        x: "-50%",
+        y: "-50%",
         width: PIN_DIAMETER,
         height: PIN_DIAMETER,
-        transform: "translate(-50%, -50%)",
         background: "transparent",
         border: "none",
         padding: 0,
@@ -118,6 +128,33 @@ export default function LocationPin({
             draggable={false}
           />
         </div>
+
+        {/* Concern count badge — top-right of the pin. Renders only
+            when the location has at least one concern. The count is
+            fetched once at the page level and passed in as a prop. */}
+        {concernCount > 0 && (
+          <div
+            aria-label={`${concernCount} concerns`}
+            className="absolute pointer-events-none rounded-full flex items-center justify-center"
+            style={{
+              top: -4,
+              right: -4,
+              width: 18,
+              height: 18,
+              background: "#F47560",
+              color: "#FFFFFF",
+              fontFamily: "var(--font-space-grotesk)",
+              fontSize: 10,
+              fontWeight: 700,
+              lineHeight: 1,
+              border: "2px solid #F5F2EB",
+              boxShadow: "0 2px 6px rgba(244, 117, 96, 0.35)",
+              zIndex: 1,
+            }}
+          >
+            {concernCount > 9 ? "9+" : concernCount}
+          </div>
+        )}
 
         {hovered && (
           <div

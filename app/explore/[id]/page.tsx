@@ -15,15 +15,31 @@ import {
   StickyNoteComposer,
   StickyNoteDot,
 } from "@/components/explore/StickyNote";
+import SubmissionModal from "@/components/explore/SubmissionModal";
+import SubmitContributionsButton from "@/components/explore/SubmitContributionsButton";
 import TutorialOverlay, {
   type TutorialStep,
 } from "@/components/explore/TutorialOverlay";
 import {
   loadAnnotations,
-  makeId,
-  saveAnnotations,
-  type StickyAnnotation,
-} from "@/lib/annotations-storage";
+  loadQuestionResponses,
+  submitContributions,
+  type SubmissionData,
+} from "@/lib/annotations-api";
+import type {
+  DatabaseAnnotation,
+  DatabaseQuestionResponse,
+} from "@/lib/database-types";
+import {
+  clearAllDrafts,
+  loadDraftAnnotations,
+  loadDraftResponses,
+  makeDraftId,
+  saveDraftAnnotations,
+  saveDraftResponses,
+  type DraftAnnotation,
+  type DraftQuestionResponse,
+} from "@/lib/draft-state";
 import { EXPLORE_LOCATIONS } from "@/lib/explore-locations";
 import { PLANNER_QUESTIONS } from "@/lib/planner-questions";
 
@@ -73,20 +89,44 @@ export default function LocationPage() {
 
   const photoRef = useRef<HTMLDivElement | null>(null);
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
-  const [annotations, setAnnotations] = useState<StickyAnnotation[]>([]);
+  // Submitted = persisted in Supabase. Drafts = local-only, held in
+  // sessionStorage until the user goes through the submission modal.
+  const [submittedAnnotations, setSubmittedAnnotations] = useState<DatabaseAnnotation[]>([]);
+  const [submittedResponses, setSubmittedResponses] = useState<DatabaseQuestionResponse[]>([]);
+  const [draftAnnotations, setDraftAnnotations] = useState<DraftAnnotation[]>([]);
+  const [draftResponses, setDraftResponses] = useState<DraftQuestionResponse[]>([]);
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [pendingNote, setPendingNote] = useState<{ x: number; y: number } | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [tutorialStep, setTutorialStep] = useState<TutorialStep | null>(null);
+  const [submissionModalOpen, setSubmissionModalOpen] = useState(false);
 
-  // Hydrate annotations from localStorage after mount.
+  // Hydrate submitted from Supabase + drafts from sessionStorage. The
+  // helpers swallow errors and return [] so the page stays usable when
+  // offline or RLS-blocked.
   useEffect(() => {
     if (!id) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical localStorage hydration on mount
-    setAnnotations(loadAnnotations(id));
+    let cancelled = false;
+    Promise.all([loadAnnotations(id), loadQuestionResponses(id)]).then(
+      ([annotationsData, responsesData]) => {
+        if (cancelled) return;
+        setSubmittedAnnotations(
+          annotationsData.filter((a) => a.type === "sticky"),
+        );
+        setSubmittedResponses(responsesData);
+      },
+    );
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical sessionStorage hydration on mount
+    setDraftAnnotations(loadDraftAnnotations(id));
+    setDraftResponses(loadDraftResponses(id));
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
+
+  const draftCount = draftAnnotations.length + draftResponses.length;
 
   // Hydrate tutorial gate. Only show if the user has never completed it.
   useEffect(() => {
@@ -198,22 +238,25 @@ export default function LocationPage() {
     [activeTool, pendingNote, selectedNoteId],
   );
 
-  // ── Sticky note CRUD ──────────────────────────────────────────────────────
+  // ── Draft sticky notes (local + sessionStorage) ──────────────────────────
+  // Submitted notes are immutable from the UI now — drafts are the only
+  // CRUD surface. The submission modal flow is what promotes drafts to
+  // Supabase rows.
 
   const handleSaveNote = useCallback(
     (content: string) => {
       if (!pendingNote || !id) return;
-      const newNote: StickyAnnotation = {
-        id: makeId(),
+      const newDraft: DraftAnnotation = {
+        tempId: makeDraftId(),
         type: "sticky",
         x: pendingNote.x,
         y: pendingNote.y,
         content,
         createdAt: new Date().toISOString(),
       };
-      setAnnotations((prev) => {
-        const next = [...prev, newNote];
-        saveAnnotations(id, next);
+      setDraftAnnotations((prev) => {
+        const next = [...prev, newDraft];
+        saveDraftAnnotations(id, next);
         return next;
       });
       setPendingNote(null);
@@ -221,31 +264,78 @@ export default function LocationPage() {
     [pendingNote, id],
   );
 
-  const handleDeleteNote = useCallback(
-    (annotationId: string) => {
+  const handleDeleteDraftNote = useCallback(
+    (tempId: string) => {
       if (!id) return;
-      setAnnotations((prev) => {
-        const next = prev.filter((a) => a.id !== annotationId);
-        saveAnnotations(id, next);
+      setDraftAnnotations((prev) => {
+        const next = prev.filter((d) => d.tempId !== tempId);
+        saveDraftAnnotations(id, next);
         return next;
       });
-      setSelectedNoteId((sel) => (sel === annotationId ? null : sel));
+      setSelectedNoteId((sel) => (sel === tempId ? null : sel));
     },
     [id],
   );
 
-  const handleUpdateNote = useCallback(
-    (annotationId: string, content: string) => {
+  const handleUpdateDraftNote = useCallback(
+    (tempId: string, content: string) => {
       if (!id) return;
-      setAnnotations((prev) => {
-        const next = prev.map((a) =>
-          a.id === annotationId ? { ...a, content } : a,
+      setDraftAnnotations((prev) => {
+        const next = prev.map((d) =>
+          d.tempId === tempId ? { ...d, content } : d,
         );
-        saveAnnotations(id, next);
+        saveDraftAnnotations(id, next);
         return next;
       });
     },
     [id],
+  );
+
+  // ── Draft question responses (local + sessionStorage) ────────────────────
+
+  const handleAddDraftResponse = useCallback(
+    (draft: DraftQuestionResponse) => {
+      if (!id) return;
+      setDraftResponses((prev) => {
+        const next = [...prev, draft];
+        saveDraftResponses(id, next);
+        return next;
+      });
+    },
+    [id],
+  );
+
+  // ── Batch submission ─────────────────────────────────────────────────────
+
+  const handleSubmitContributions = useCallback(
+    async (data: SubmissionData) => {
+      if (!id) return { success: false as const };
+      const result = await submitContributions(
+        id,
+        draftAnnotations,
+        draftResponses,
+        data,
+      );
+      if (!result.success) {
+        return { success: false as const, error: result.error };
+      }
+      // Re-fetch submitted from Supabase so the just-promoted drafts
+      // appear in their final styling, then clear the drafts from
+      // both state and sessionStorage.
+      const [annotationsData, responsesData] = await Promise.all([
+        loadAnnotations(id),
+        loadQuestionResponses(id),
+      ]);
+      setSubmittedAnnotations(
+        annotationsData.filter((a) => a.type === "sticky"),
+      );
+      setSubmittedResponses(responsesData);
+      setDraftAnnotations([]);
+      setDraftResponses([]);
+      clearAllDrafts(id);
+      return { success: true as const };
+    },
+    [id, draftAnnotations, draftResponses],
   );
 
   // ── Back navigation with fade-out ─────────────────────────────────────────
@@ -327,17 +417,44 @@ export default function LocationPage() {
           transition={{ duration: 0.3, ease: "easeOut" }}
           style={{ pointerEvents: showAnnotations ? "auto" : "none" }}
         >
-          {annotations.map((a, i) => (
+          {/* Submitted notes: solid coral. No edit/delete handlers
+              — submitted contributions are part of the public record
+              and shouldn't be mutated from the same browser. */}
+          {submittedAnnotations.map((a, i) => (
             <StickyNoteDot
               key={a.id}
               annotation={a}
               index={i}
               selected={selectedNoteId === a.id}
+              isDraft={false}
               onSelect={() =>
                 setSelectedNoteId((sel) => (sel === a.id ? null : a.id))
               }
-              onDelete={() => handleDeleteNote(a.id)}
-              onUpdate={(content) => handleUpdateNote(a.id, content)}
+              onDelete={() => undefined}
+              onUpdate={() => undefined}
+            />
+          ))}
+          {/* Drafts: dashed border + slight transparency. Edit/Delete
+              mutate local state + sessionStorage. */}
+          {draftAnnotations.map((d, i) => (
+            <StickyNoteDot
+              key={d.tempId}
+              annotation={{
+                id: d.tempId,
+                x_position: d.x,
+                y_position: d.y,
+                content: d.content,
+              }}
+              index={submittedAnnotations.length + i}
+              selected={selectedNoteId === d.tempId}
+              isDraft
+              onSelect={() =>
+                setSelectedNoteId((sel) =>
+                  sel === d.tempId ? null : d.tempId,
+                )
+              }
+              onDelete={() => handleDeleteDraftNote(d.tempId)}
+              onUpdate={(content) => handleUpdateDraftNote(d.tempId, content)}
             />
           ))}
         </motion.div>
@@ -362,8 +479,10 @@ export default function LocationPage() {
 
       {/* ── Always-visible planner question cards ───────────────────────── */}
       <FloatingQuestionCards
-        locationId={location.id}
         questions={questions}
+        submittedResponses={submittedResponses}
+        draftResponses={draftResponses}
+        onAddDraftResponse={handleAddDraftResponse}
         tutorialHighlight={tutorialStep === 3}
       />
 
@@ -376,6 +495,25 @@ export default function LocationPage() {
         tutorialHighlight={tutorialStep === 2}
       />
       <ActivityCounters concerns={3} questions={4} />
+
+      {/* ── Submit Contributions floating button ────────────────────────── */}
+      <SubmitContributionsButton
+        count={draftCount}
+        onClick={() => setSubmissionModalOpen(true)}
+      />
+
+      {/* ── Demographic submission modal ────────────────────────────────── */}
+      <SubmissionModal
+        open={submissionModalOpen}
+        draftAnnotationsCount={draftAnnotations.length}
+        draftResponsesCount={draftResponses.length}
+        onClose={() => setSubmissionModalOpen(false)}
+        onNavigateAway={() => {
+          setSubmissionModalOpen(false);
+          handleBack();
+        }}
+        onSubmit={handleSubmitContributions}
+      />
 
       {/* ── Tutorial (first-visit only) ─────────────────────────────────── */}
       <TutorialOverlay

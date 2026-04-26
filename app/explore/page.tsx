@@ -8,6 +8,7 @@ import IBXLineAnimation from "@/components/explore/IBXLineAnimation";
 import LocationPin from "@/components/explore/LocationPin";
 import PinAdminTool from "@/components/explore/PinAdminTool";
 import WelcomeText from "@/components/explore/WelcomeText";
+import { getConcernCountByLocation } from "@/lib/annotations-api";
 import { EXPLORE_LOCATIONS, type ExploreLocation } from "@/lib/explore-locations";
 
 const SESSION_FLAG = "ibx-explore-animated";
@@ -16,32 +17,51 @@ const SESSION_FLAG = "ibx-explore-animated";
 // from a child route skips animations.
 const FULL_SEQUENCE_MS = 8500;
 
-// Initial-render decision. Done at module evaluation time on the
-// client so the first render already knows whether to play the intro.
-// Falsy on the server (SSR), which means SSR HTML always renders the
-// animated state — fine because the page is a client component and
-// hydrates before the user can perceive the difference.
-function shouldSkipIntro(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.sessionStorage.getItem(SESSION_FLAG) === "true";
-  } catch {
-    return false;
-  }
-}
-
 export default function ExplorePage() {
   const imageContainerRef = useRef<HTMLDivElement | null>(null);
   const [adminMode, setAdminMode] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  const [instant] = useState(shouldSkipIntro);
+  // Both `mounted` and `instant` start at false on server AND first
+  // client render, so SSR HTML matches initial-client HTML byte-for-byte
+  // (no hydration mismatch). The mount effect then reads sessionStorage
+  // and flips both at once. Animation-bearing children are only rendered
+  // once `mounted` is true — they mount with the correct `instant`.
+  const [mounted, setMounted] = useState(false);
+  const [instant, setInstant] = useState(false);
+  // { locationId → count }, hydrated from Supabase. Empty object until
+  // the fetch resolves; pins render with 0 (badge hidden) in the meantime.
+  const [concernCounts, setConcernCounts] = useState<Record<string, number>>({});
   const router = useRouter();
+
+  useEffect(() => {
+    let skip = false;
+    try {
+      skip = window.sessionStorage.getItem(SESSION_FLAG) === "true";
+    } catch {
+      /* private browsing — fall through with skip=false */
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical hydration-safe sessionStorage read
+    if (skip) setInstant(true);
+    setMounted(true);
+  }, []);
+
+  // Fire-and-forget. Errors are console-logged inside the helper; if
+  // the call fails we just leave concernCounts={} and no badges show.
+  useEffect(() => {
+    let cancelled = false;
+    getConcernCountByLocation().then((counts) => {
+      if (!cancelled) setConcernCounts(counts);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Once the welcome sequence finishes, lock the flag for this session
   // so a return from a location page skips the intro. Only runs when
   // the intro actually played; instant=true means it's already set.
   useEffect(() => {
-    if (instant) return;
+    if (!mounted || instant) return;
     const t = window.setTimeout(() => {
       try {
         window.sessionStorage.setItem(SESSION_FLAG, "true");
@@ -50,7 +70,7 @@ export default function ExplorePage() {
       }
     }, FULL_SEQUENCE_MS);
     return () => window.clearTimeout(t);
-  }, [instant]);
+  }, [mounted, instant]);
 
   const handlePinSelect = useCallback(
     (loc: ExploreLocation) => {
@@ -82,9 +102,13 @@ export default function ExplorePage() {
         ref={imageContainerRef}
         className="absolute inset-0"
         style={{ zIndex: 0, cursor: adminMode ? "crosshair" : "default" }}
-        initial={instant ? false : { opacity: 0 }}
+        // Same initial on server and client so SSR HTML matches first
+        // client render. The 0.8s fade-in plays on every entry — fine
+        // even on instant returns, since the prior page's white fade-out
+        // is already covering the swap.
+        initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={instant ? { duration: 0 } : { duration: 0.8, ease: "easeOut" }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -105,9 +129,14 @@ export default function ExplorePage() {
           style={{ background: "rgba(237, 229, 213, 0.1)" }}
         />
 
-        <IBXLineAnimation instant={instant} />
+        {/* Animation-bearing children are gated on `mounted` so they
+            never render server-side. They mount once with the correct
+            `instant` value (read from sessionStorage in the effect),
+            so each child's lazy-state initializers fire correctly and
+            no prop-driven re-render is needed mid-animation. */}
+        {mounted && <IBXLineAnimation instant={instant} />}
 
-        {!adminMode &&
+        {mounted && !adminMode &&
           EXPLORE_LOCATIONS.map((loc, i) => (
             <LocationPin
               key={loc.id}
@@ -115,6 +144,7 @@ export default function ExplorePage() {
               index={i}
               onSelect={handlePinSelect}
               instant={instant}
+              concernCount={concernCounts[loc.id] ?? 0}
             />
           ))}
       </motion.div>
@@ -126,7 +156,7 @@ export default function ExplorePage() {
 
       <ExploreNav />
 
-      <WelcomeText instant={instant} />
+      {mounted && <WelcomeText instant={instant} />}
 
       {/* White fade-out when navigating into a location page. The
           destination paints its own white bg and fades the photo in,

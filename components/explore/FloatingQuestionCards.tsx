@@ -1,13 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion, type Transition } from "framer-motion";
-import { useEffect, useState } from "react";
-import {
-  loadResponses,
-  type QuestionResponse,
-} from "@/lib/annotations-storage";
+import { useEffect, useMemo, useState } from "react";
+import type { DatabaseQuestionResponse } from "@/lib/database-types";
+import type { DraftQuestionResponse } from "@/lib/draft-state";
 import type { PlannerQuestion } from "@/lib/planner-questions";
-import QuestionCardExpanded from "./QuestionCardExpanded";
+import QuestionCardExpanded, {
+  type DisplayResponse,
+} from "./QuestionCardExpanded";
 
 const NAVY = "#0B1D3A";
 const TEAL = "#1ABFAD";
@@ -21,19 +21,25 @@ const EXPAND_TRANSITION: Transition = {
 };
 
 type Props = {
-  locationId: string;
   questions: PlannerQuestion[];
+  /** Submitted responses, fetched from Supabase. */
+  submittedResponses: DatabaseQuestionResponse[];
+  /** Local-only response drafts. Render with a draft visual treatment. */
+  draftResponses: DraftQuestionResponse[];
+  /** Add a new response to the local drafts. */
+  onAddDraftResponse: (draft: DraftQuestionResponse) => void;
   /** Tutorial step 3 — surrounds every compact card with a coral pulse. */
   tutorialHighlight?: boolean;
 };
 
 export default function FloatingQuestionCards({
-  locationId,
   questions,
+  submittedResponses,
+  draftResponses,
+  onAddDraftResponse,
   tutorialHighlight = false,
 }: Props) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-  const [responses, setResponses] = useState<QuestionResponse[]>([]);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -43,12 +49,35 @@ export default function FloatingQuestionCards({
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  useEffect(() => {
-    setResponses(loadResponses(locationId));
-  }, [locationId]);
+  // Merge submitted + drafts into one display list per question. Drafts
+  // are tagged isDraft so the expanded card styles them distinctly.
+  // Memoized so the QuestionCardExpanded body doesn't re-stagger on
+  // every parent re-render.
+  const displayByQuestion = useMemo(() => {
+    const byIndex: Record<number, DisplayResponse[]> = {};
+    for (const r of submittedResponses) {
+      const list = byIndex[r.question_index] ?? (byIndex[r.question_index] = []);
+      list.push({
+        id: r.id,
+        text: r.response,
+        createdAt: r.created_at,
+        isDraft: false,
+      });
+    }
+    for (const d of draftResponses) {
+      const list = byIndex[d.questionIndex] ?? (byIndex[d.questionIndex] = []);
+      list.push({
+        id: d.tempId,
+        text: d.response,
+        createdAt: d.createdAt,
+        isDraft: true,
+      });
+    }
+    return byIndex;
+  }, [submittedResponses, draftResponses]);
 
-  const responsesFor = (i: number) =>
-    responses.filter((r) => r.questionIndex === i);
+  const responsesFor = (i: number): DisplayResponse[] =>
+    displayByQuestion[i] ?? [];
 
   // During the tutorial spotlight (step 3) lift z-index above the
   // backdrop (z 90) so the cards read crisp through the blur.
@@ -121,10 +150,8 @@ export default function FloatingQuestionCards({
                   <QuestionCardExpanded
                     question={q}
                     questionIndex={i}
-                    locationId={locationId}
                     responses={responsesFor(i)}
-                    allResponses={responses}
-                    onSubmit={(next) => setResponses(next)}
+                    onSubmitDraft={onAddDraftResponse}
                     onClose={() => setExpandedIndex(null)}
                   />
                 </motion.div>

@@ -3,25 +3,34 @@
 import { motion, type Variants } from "framer-motion";
 import { useState } from "react";
 import {
-  makeId,
-  saveResponses,
-  type QuestionResponse,
-} from "@/lib/annotations-storage";
+  makeDraftId,
+  type DraftQuestionResponse,
+} from "@/lib/draft-state";
 import type { PlannerQuestion } from "@/lib/planner-questions";
 
 const NAVY = "#0B1D3A";
 const TEAL = "#1ABFAD";
+const CORAL = "#F47560";
 const SLATE = "#8899AA";
 const SOFT_BORDER = "#E0DCD4";
 const CREAM = "#FAF5EB";
 
+// Display-only response shape so the parent can pass either a
+// DatabaseQuestionResponse or a DraftQuestionResponse with one
+// `isDraft` flag controlling presentation.
+export type DisplayResponse = {
+  id: string;
+  text: string;
+  createdAt: string;
+  isDraft: boolean;
+};
+
 type Props = {
   question: PlannerQuestion;
   questionIndex: number;
-  locationId: string;
-  responses: QuestionResponse[];
-  allResponses: QuestionResponse[];
-  onSubmit: (next: QuestionResponse[]) => void;
+  responses: DisplayResponse[];
+  /** Called with a fresh draft so the parent can append + persist. */
+  onSubmitDraft: (draft: DraftQuestionResponse) => void;
   onClose: () => void;
 };
 
@@ -57,30 +66,25 @@ function formatTimestamp(iso: string): string {
 export default function QuestionCardExpanded({
   question,
   questionIndex,
-  locationId,
   responses,
-  allResponses,
-  onSubmit,
+  onSubmitDraft,
   onClose,
 }: Props) {
   const [draft, setDraft] = useState("");
-  const [justSubmitted, setJustSubmitted] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
 
   const handleSubmit = () => {
     const text = draft.trim();
     if (!text) return;
-    const newResponse: QuestionResponse = {
-      id: makeId(),
+    onSubmitDraft({
+      tempId: makeDraftId(),
       questionIndex,
       response: text,
       createdAt: new Date().toISOString(),
-    };
-    const next = [...allResponses, newResponse];
-    saveResponses(locationId, next);
-    onSubmit(next);
+    });
     setDraft("");
-    setJustSubmitted(true);
-    window.setTimeout(() => setJustSubmitted(false), 2200);
+    setJustAdded(true);
+    window.setTimeout(() => setJustAdded(false), 2200);
   };
 
   return (
@@ -218,14 +222,16 @@ export default function QuestionCardExpanded({
       <motion.div
         variants={itemVariants}
         className="flex items-center justify-between"
-        style={{ marginTop: 8 }}
+        style={{ marginTop: 8, gap: 8 }}
       >
-        {justSubmitted ? (
-          <span style={{ color: TEAL, fontSize: 11, fontWeight: 600 }}>
-            Thanks for your response!
+        {justAdded ? (
+          <span style={{ color: CORAL, fontSize: 11, fontWeight: 600 }}>
+            Added to your drafts
           </span>
         ) : (
-          <span />
+          <span style={{ color: SLATE, fontSize: 10.5 }}>
+            Stays a draft until you submit
+          </span>
         )}
         <button
           type="button"
@@ -243,13 +249,14 @@ export default function QuestionCardExpanded({
             fontWeight: 600,
             cursor: draft.trim() ? "pointer" : "not-allowed",
             transition: "background 0.2s ease, color 0.2s ease",
+            flexShrink: 0,
           }}
         >
-          Submit
+          Add response
         </button>
       </motion.div>
 
-      {/* Existing responses */}
+      {/* Existing + draft responses */}
       {responses.length > 0 && (
         <motion.div
           variants={itemVariants}
@@ -271,7 +278,9 @@ export default function QuestionCardExpanded({
               key={r.id}
               style={{
                 background: CREAM,
-                border: `1px solid ${SOFT_BORDER}`,
+                border: r.isDraft
+                  ? `1px dashed ${CORAL}`
+                  : `1px solid ${SOFT_BORDER}`,
                 borderRadius: 10,
                 padding: "8px 10px",
                 fontSize: 12,
@@ -279,7 +288,26 @@ export default function QuestionCardExpanded({
                 color: NAVY,
               }}
             >
-              <div style={{ wordBreak: "break-word" }}>{r.response}</div>
+              <div
+                style={{
+                  wordBreak: "break-word",
+                  fontStyle: r.isDraft ? "italic" : "normal",
+                }}
+              >
+                {r.isDraft && (
+                  <span
+                    style={{
+                      color: CORAL,
+                      fontWeight: 600,
+                      marginRight: 4,
+                      fontStyle: "normal",
+                    }}
+                  >
+                    (Draft)
+                  </span>
+                )}
+                {r.text}
+              </div>
               <div
                 style={{
                   fontSize: 10,

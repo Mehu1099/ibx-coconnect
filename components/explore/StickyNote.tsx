@@ -2,7 +2,6 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import type { StickyAnnotation } from "@/lib/annotations-storage";
 
 const CORAL = "#F47560";
 const TEAL = "#1ABFAD";
@@ -10,12 +9,25 @@ const NAVY = "#0B1D3A";
 const SLATE = "#8899AA";
 const SOFT_BORDER = "#E0DCD4";
 
+// Slim shape so both DatabaseAnnotation rows and locally-held draft
+// annotations satisfy this component. The parent passes either kind
+// after a small adapter for drafts.
+export type StickyDisplay = {
+  id: string;
+  x_position: number;
+  y_position: number;
+  content: string | null;
+};
+
 // ─── Existing dot (rendered for each saved note) ────────────────────────────
 
 type DotProps = {
-  annotation: StickyAnnotation;
+  annotation: StickyDisplay;
   index: number;
   selected: boolean;
+  /** Drafts get a dashed outer border + slight transparency so users
+   *  can tell at a glance which notes haven't been submitted yet. */
+  isDraft?: boolean;
   onSelect: () => void;
   onDelete: () => void;
   onUpdate: (content: string) => void;
@@ -25,6 +37,7 @@ export function StickyNoteDot({
   annotation,
   index,
   selected,
+  isDraft = false,
   onSelect,
   onDelete,
   onUpdate,
@@ -36,8 +49,8 @@ export function StickyNoteDot({
     <div
       className="absolute"
       style={{
-        left: `${annotation.x}%`,
-        top: `${annotation.y}%`,
+        left: `${annotation.x_position}%`,
+        top: `${annotation.y_position}%`,
         transform: "translate(-50%, -50%)",
         zIndex: selected ? 35 : 30,
       }}
@@ -76,16 +89,17 @@ export function StickyNoteDot({
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        aria-label="Sticky note"
+        aria-label={isDraft ? "Sticky note (draft)" : "Sticky note"}
         className="block cursor-pointer relative"
         style={{
           width: 14,
           height: 14,
           borderRadius: "50%",
           background: CORAL,
-          border: "2px solid #FFFFFF",
+          border: isDraft ? "2px dashed #FFFFFF" : "2px solid #FFFFFF",
           boxShadow: "0 2px 6px rgba(11, 29, 58, 0.25)",
           padding: 0,
+          opacity: isDraft ? 0.85 : 1,
         }}
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -102,8 +116,9 @@ export function StickyNoteDot({
         {showCard && (
           <NoteCard
             key={`card-${selected ? "selected" : "hover"}`}
-            content={annotation.content}
+            content={annotation.content ?? ""}
             selected={selected}
+            isDraft={isDraft}
             onDelete={onDelete}
             onUpdate={onUpdate}
           />
@@ -118,11 +133,13 @@ export function StickyNoteDot({
 function NoteCard({
   content,
   selected,
+  isDraft,
   onDelete,
   onUpdate,
 }: {
   content: string;
   selected: boolean;
+  isDraft: boolean;
   onDelete: () => void;
   onUpdate: (content: string) => void;
 }) {
@@ -142,7 +159,7 @@ function NoteCard({
         width: 240,
         maxWidth: "calc(100vw - 32px)",
         boxShadow: "0 12px 32px rgba(11, 29, 58, 0.18)",
-        border: `1px solid ${SOFT_BORDER}`,
+        border: isDraft ? `1px dashed ${CORAL}` : `1px solid ${SOFT_BORDER}`,
         fontFamily: "var(--font-space-grotesk)",
         color: NAVY,
       }}
