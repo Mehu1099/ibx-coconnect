@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Space_Grotesk } from "next/font/google";
+import { AuthProvider } from "@/lib/auth-context";
 // import FPSCounter from "@/components/dev/FPSCounter";
 import "./globals.css";
 
@@ -46,7 +47,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col">
-        {children}
+        <AuthProvider>{children}</AuthProvider>
         {/* <FPSCounter /> */}
       </body>
     </html>

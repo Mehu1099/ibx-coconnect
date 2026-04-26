@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import * as d3 from "d3";
 import type { FeatureCollection } from "geojson";
+import AuthBadge from "@/components/auth/AuthBadge";
+import WelcomeBanner from "@/components/auth/WelcomeBanner";
 
 // ═══════════════════════════════════ Palette ═══════════════════════════════════
 
@@ -252,6 +254,10 @@ export default function Home() {
     setTimeout(() => router.push("/explore"), 500);
   }, [transitioning, router]);
 
+  const handleStakeholderPortal = useCallback(() => {
+    router.push("/stakeholder");
+  }, [router]);
+
   // ── Measure viewport ──────────────────────────────────────────────────────
   useEffect(() => {
     const upd = () => setDims({ w: window.innerWidth, h: window.innerHeight });
@@ -497,6 +503,21 @@ export default function Home() {
       }}
       transition={{ duration: 0.5, ease: "easeInOut" }}
     >
+      {/* ── Auth UI: top-right badge + post-signin welcome banner ────── */}
+      {/* Badge shows "Sign in" when signed out, name + sign-out menu when
+          signed in. Suspense is required by useSearchParams() in the
+          banner; both render nothing until auth resolves so the navy
+          intro frames stay clean. */}
+      <div
+        className="absolute top-4 right-4 z-30"
+        style={{ pointerEvents: "auto" }}
+      >
+        <AuthBadge variant="dark" />
+      </div>
+      <Suspense fallback={null}>
+        <WelcomeBanner />
+      </Suspense>
+
       {/* ── Star field ─────────────────────────────────────────────────── */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
         {STARS.map((st, i) => (
@@ -861,7 +882,11 @@ export default function Home() {
             >
               Explore the Platform
             </button>
-            <button className="btn-portal cursor-pointer">
+            <button
+              className="btn-portal cursor-pointer"
+              onClick={handleStakeholderPortal}
+              disabled={transitioning}
+            >
               Stakeholder Portal
             </button>
           </motion.div>

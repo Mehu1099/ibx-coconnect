@@ -7,6 +7,7 @@ import type {
   SubmissionData,
   SubmissionRole,
 } from "@/lib/annotations-api";
+import { useAuth } from "@/lib/auth-context";
 
 const NAVY = "#0B1D3A";
 const TEAL = "#1ABFAD";
@@ -134,6 +135,7 @@ function ModalBody({
   onClose: () => void;
   onNavigateAway: () => void;
 }) {
+  const { isStakeholder, profile } = useAuth();
   const [stage, setStage] = useState<"form" | "submitting" | "success">("form");
   const [role, setRole] = useState<SubmissionRole | null>(null);
   const [ageRange, setAgeRange] = useState<SubmissionAgeRange | null>(null);
@@ -167,6 +169,37 @@ function ModalBody({
     }
   };
 
+  // Stakeholder submission: skip demographic form, attach stored
+  // organization and a fixed role/age sentinel. user_id on the row
+  // (set in submitContributions) is what marks this as a stakeholder
+  // submission downstream.
+  const handleStakeholderSubmit = async () => {
+    setSubmittedSticky(draftAnnotationsCount);
+    setSubmittedResponses(draftResponsesCount);
+    setStage("submitting");
+    setErrorMessage(null);
+    const stakeholderRole: SubmissionRole = "planner_stakeholder";
+    const stakeholderAge: SubmissionAgeRange = "prefer_not_to_say";
+    const result = await onSubmit({
+      role: stakeholderRole,
+      ageRange: stakeholderAge,
+      organization: profile?.organization ?? undefined,
+      isStakeholder: true,
+    });
+    if (result.success) {
+      // Surface what the success card will display so it doesn't
+      // render with null role/age.
+      setRole(stakeholderRole);
+      setAgeRange(stakeholderAge);
+      setStage("success");
+    } else {
+      setStage("form");
+      setErrorMessage(
+        "We couldn't submit your contributions. Please try again.",
+      );
+    }
+  };
+
   return (
     <>
       {/* Sparks layer — siblings of the modal card, fixed to viewport,
@@ -185,6 +218,17 @@ function ModalBody({
             onClose={onClose}
             onNavigateAway={onNavigateAway}
           />
+        ) : isStakeholder ? (
+          <StakeholderFormView
+            key="stakeholder-form"
+            stage={stage}
+            displayName={profile?.display_name ?? "stakeholder"}
+            organization={profile?.organization ?? "your organization"}
+            errorMessage={errorMessage}
+            totalCount={totalDraftCount}
+            onSubmit={handleStakeholderSubmit}
+            onClose={onClose}
+          />
         ) : (
           <FormView
             key="form"
@@ -201,6 +245,164 @@ function ModalBody({
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+// Stakeholder-only form: identity is already established by Supabase
+// Auth, so we skip the demographic grid and instead ask for an
+// affirmation that this submission is being made in the user's
+// professional capacity.
+function StakeholderFormView({
+  stage,
+  displayName,
+  organization,
+  errorMessage,
+  totalCount,
+  onSubmit,
+  onClose,
+}: {
+  stage: "form" | "submitting";
+  displayName: string;
+  organization: string;
+  errorMessage: string | null;
+  totalCount: number;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  const [confirmed, setConfirmed] = useState(false);
+  const isSubmitting = stage === "submitting";
+  const canSubmit = confirmed && !isSubmitting;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+    >
+      <CloseButton onClick={onClose} />
+
+      <SectionLabel>Stakeholder submission</SectionLabel>
+      <h2
+        style={{
+          marginTop: 6,
+          fontSize: 22,
+          fontWeight: 500,
+          color: NAVY,
+          lineHeight: 1.25,
+        }}
+      >
+        Submitting as {displayName}
+      </h2>
+      <p
+        style={{
+          marginTop: 8,
+          fontSize: 13,
+          color: SLATE,
+          lineHeight: 1.5,
+        }}
+      >
+        {totalCount} {totalCount === 1 ? "contribution" : "contributions"}{" "}
+        ready to submit. Your verified account is attached automatically.
+      </p>
+
+      <div
+        style={{
+          marginTop: 18,
+          padding: "12px 14px",
+          background: "#FFFFFF",
+          border: `1px solid ${FAINT_BORDER}`,
+          borderRadius: 12,
+        }}
+      >
+        <SectionLabel>Organization</SectionLabel>
+        <div
+          style={{
+            marginTop: 4,
+            fontSize: 14,
+            fontWeight: 600,
+            color: NAVY,
+          }}
+        >
+          {organization}
+        </div>
+      </div>
+
+      <label
+        style={{
+          marginTop: 16,
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 10,
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={confirmed}
+          onChange={(e) => setConfirmed(e.target.checked)}
+          style={{
+            marginTop: 3,
+            width: 16,
+            height: 16,
+            accentColor: TEAL,
+            cursor: "pointer",
+          }}
+        />
+        <span
+          style={{
+            fontSize: 13,
+            lineHeight: 1.5,
+            color: NAVY,
+          }}
+        >
+          I&apos;m submitting these contributions in my capacity as a
+          representative of <strong>{organization}</strong>.
+        </span>
+      </label>
+
+      {errorMessage && (
+        <div
+          role="alert"
+          style={{
+            marginTop: 14,
+            fontSize: 12,
+            fontWeight: 500,
+            color: CORAL,
+          }}
+        >
+          {errorMessage}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onSubmit}
+        disabled={!canSubmit}
+        style={{
+          marginTop: 18,
+          width: "100%",
+          padding: "12px 16px",
+          borderRadius: 9999,
+          border: "none",
+          cursor: canSubmit ? "pointer" : "not-allowed",
+          background: canSubmit ? CORAL : "#D8C7BD",
+          color: "#FFFFFF",
+          fontFamily: "inherit",
+          fontSize: 13,
+          fontWeight: 600,
+          letterSpacing: "0.2px",
+          opacity: isSubmitting ? 0.7 : 1,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+        }}
+      >
+        {isSubmitting && <Spinner />}
+        {isSubmitting ? "Submitting…" : "Submit verified contributions"}
+      </button>
+    </motion.div>
   );
 }
 

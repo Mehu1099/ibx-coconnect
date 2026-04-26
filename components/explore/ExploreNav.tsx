@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useState } from "react";
+import AuthBadge from "@/components/auth/AuthBadge";
 
 const NAV_LINKS: { label: string; href: string; active?: boolean }[] = [
   { label: "Explore", href: "/explore", active: true },
@@ -88,16 +89,7 @@ export default function ExploreNav() {
           </a>
         ))}
 
-        <div
-          className="rounded-full"
-          style={{
-            width: 32,
-            height: 32,
-            background: "#E0DCD4",
-            border: "1px solid #D0CBC0",
-          }}
-          aria-label="User avatar placeholder"
-        />
+        <AuthBadge variant="light" />
       </motion.div>
     </nav>
   );

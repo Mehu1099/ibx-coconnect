@@ -27,6 +27,7 @@ import {
   submitContributions,
   type SubmissionData,
 } from "@/lib/annotations-api";
+import { useAuth } from "@/lib/auth-context";
 import type {
   DatabaseAnnotation,
   DatabaseQuestionResponse,
@@ -88,6 +89,14 @@ export default function LocationPage() {
   const location = EXPLORE_LOCATIONS.find((l) => l.id === id);
   const questions = PLANNER_QUESTIONS[id] ?? [];
 
+  // Authenticated stakeholders see their submissions across browsers
+  // (filtered by user_id); anonymous users see this-browser-only
+  // (filtered by anon session id). authLoading gates the first fetch
+  // so we don't kick off an anonymous read before Supabase has had a
+  // chance to restore an existing session.
+  const { user, isLoading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
+
   const photoRef = useRef<HTMLDivElement | null>(null);
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
   // Submitted = persisted in Supabase. Drafts = local-only, held in
@@ -107,25 +116,36 @@ export default function LocationPage() {
   // Hydrate submitted from Supabase + drafts from sessionStorage. The
   // helpers swallow errors and return [] so the page stays usable when
   // offline or RLS-blocked.
+  //
+  // The effect re-runs whenever `userId` flips (sign-in / sign-out). On
+  // each run we CLEAR submitted state up-front before the async fetch
+  // resolves — otherwise stakeholder rows would remain visible during
+  // the 100–300ms it takes the new anonymous fetch to come back, which
+  // is both a UX glitch and a privacy concern. Drafts are session-scoped
+  // and not affected by auth, so they're hydrated unconditionally.
   useEffect(() => {
     if (!id) return;
+    if (authLoading) return;
     let cancelled = false;
-    Promise.all([loadAnnotations(id), loadQuestionResponses(id)]).then(
-      ([annotationsData, responsesData]) => {
-        if (cancelled) return;
-        setSubmittedAnnotations(
-          annotationsData.filter((a) => a.type === "sticky"),
-        );
-        setSubmittedResponses(responsesData);
-      },
-    );
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical sessionStorage hydration on mount
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical clear-before-refetch when auth identity changes; otherwise stakeholder rows linger during the new anonymous fetch
+    setSubmittedAnnotations([]);
+    setSubmittedResponses([]);
+    Promise.all([
+      loadAnnotations(id, true, userId),
+      loadQuestionResponses(id, true, userId),
+    ]).then(([annotationsData, responsesData]) => {
+      if (cancelled) return;
+      setSubmittedAnnotations(
+        annotationsData.filter((a) => a.type === "sticky"),
+      );
+      setSubmittedResponses(responsesData);
+    });
     setDraftAnnotations(loadDraftAnnotations(id));
     setDraftResponses(loadDraftResponses(id));
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, userId, authLoading]);
 
   const draftCount = draftAnnotations.length + draftResponses.length;
 
@@ -316,6 +336,7 @@ export default function LocationPage() {
         draftAnnotations,
         draftResponses,
         data,
+        userId,
       );
       if (!result.success) {
         return { success: false as const, error: result.error };
@@ -324,8 +345,8 @@ export default function LocationPage() {
       // appear in their final styling, then clear the drafts from
       // both state and sessionStorage.
       const [annotationsData, responsesData] = await Promise.all([
-        loadAnnotations(id),
-        loadQuestionResponses(id),
+        loadAnnotations(id, true, userId),
+        loadQuestionResponses(id, true, userId),
       ]);
       setSubmittedAnnotations(
         annotationsData.filter((a) => a.type === "sticky"),
@@ -336,7 +357,7 @@ export default function LocationPage() {
       clearAllDrafts(id);
       return { success: true as const };
     },
-    [id, draftAnnotations, draftResponses],
+    [id, draftAnnotations, draftResponses, userId],
   );
 
   // ── Back navigation with fade-out ─────────────────────────────────────────

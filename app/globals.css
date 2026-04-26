@@ -117,6 +117,11 @@ body {
   50%      { transform: scale(1.06); }
 }
 
+/* ── Stakeholder auth submit-button spinner ───────────────────────────────── */
+@keyframes stakeholder-spinner {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Sticky-note shimmer (CSS, slow + staggered) ──────────────────────────── */
 /* Continuous coral pulse expanding outward from each marker. The 4s
    period + per-marker --shimmer-delay stagger keeps the page feeling

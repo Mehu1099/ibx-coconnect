@@ -49,6 +49,10 @@ export async function loadAnnotations(
   // their own contributions. The future Engage page will pass false
   // to load everyone's annotations for the public collective view.
   filterByCurrentUser: boolean = true,
+  // Authenticated stakeholders are identified by their Supabase user_id,
+  // which persists across browsers. Anonymous users continue to be
+  // identified by a localStorage session id (current browser only).
+  authenticatedUserId?: string | null,
 ): Promise<DatabaseAnnotation[]> {
   let query = supabase
     .from("annotations")
@@ -57,7 +61,18 @@ export async function loadAnnotations(
     .order("created_at", { ascending: true });
 
   if (filterByCurrentUser) {
-    query = query.eq("anonymous_session_id", getAnonymousSessionId());
+    if (authenticatedUserId) {
+      // Stakeholder canvas: strictly user_id-owned rows. Don't surface
+      // any prior anonymous contributions from this browser.
+      query = query.eq("user_id", authenticatedUserId);
+    } else {
+      // Anonymous canvas: strictly session-owned AND user_id IS NULL
+      // (belt-and-suspenders so a stakeholder row never leaks into the
+      // anonymous view even if both columns somehow match).
+      query = query
+        .eq("anonymous_session_id", getAnonymousSessionId())
+        .is("user_id", null);
+    }
   }
 
   const { data, error } = await query;
@@ -134,6 +149,7 @@ export async function loadQuestionResponses(
   locationId: string,
   // Same private-by-default contract as loadAnnotations.
   filterByCurrentUser: boolean = true,
+  authenticatedUserId?: string | null,
 ): Promise<DatabaseQuestionResponse[]> {
   let query = supabase
     .from("question_responses")
@@ -142,7 +158,14 @@ export async function loadQuestionResponses(
     .order("created_at", { ascending: false });
 
   if (filterByCurrentUser) {
-    query = query.eq("anonymous_session_id", getAnonymousSessionId());
+    if (authenticatedUserId) {
+      // Same belt-and-suspenders as loadAnnotations.
+      query = query.eq("user_id", authenticatedUserId);
+    } else {
+      query = query
+        .eq("anonymous_session_id", getAnonymousSessionId())
+        .is("user_id", null);
+    }
   }
 
   const { data, error } = await query;
@@ -205,22 +228,31 @@ export async function submitContributions(
   draftAnnotations: DraftAnnotation[],
   draftResponses: DraftQuestionResponse[],
   submissionData: SubmissionData,
+  // Authenticated stakeholders pass their Supabase user.id; rows are
+  // tagged with user_id and anonymous_session_id is left null. Anonymous
+  // users continue to be tagged by session id only. Either way, the
+  // private-canvas filter on read uses the matching column.
+  userId: string | null = null,
 ): Promise<
   | { success: true; submission: SubmittedRow }
   | { success: false; error: unknown }
 > {
-  const sessionId = getAnonymousSessionId();
+  const sessionId = userId ? null : getAnonymousSessionId();
   const totalCount = draftAnnotations.length + draftResponses.length;
+  // Stakeholder when authenticated OR when the anonymous form's role
+  // self-identifies as one — keep the existing flag honored.
+  const isStakeholder = !!userId || (submissionData.isStakeholder ?? false);
 
   // 1. Create the parent submission row.
   const { data: submission, error: submissionError } = await supabase
     .from("submissions")
     .insert({
       anonymous_session_id: sessionId,
+      user_id: userId,
       role: submissionData.role,
       age_range: submissionData.ageRange,
       organization: submissionData.organization || null,
-      is_stakeholder: submissionData.isStakeholder ?? false,
+      is_stakeholder: isStakeholder,
       location_id: locationId,
       contribution_count: totalCount,
     })
@@ -243,6 +275,7 @@ export async function submitContributions(
       y_position: d.y,
       content: d.content,
       anonymous_session_id: sessionId,
+      user_id: userId,
       submission_id: submissionId,
     }));
 
@@ -263,6 +296,7 @@ export async function submitContributions(
       question_index: d.questionIndex,
       response: d.response,
       anonymous_session_id: sessionId,
+      user_id: userId,
       submission_id: submissionId,
     }));
 
