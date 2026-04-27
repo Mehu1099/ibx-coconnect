@@ -5,6 +5,7 @@ import type {
 } from "./database-types";
 import type {
   DraftAnnotation,
+  DraftConcern,
   DraftQuestionResponse,
 } from "./draft-state";
 import { getAnonymousSessionId, supabase } from "./supabase-client";
@@ -227,6 +228,7 @@ export async function submitContributions(
   locationId: string,
   draftAnnotations: DraftAnnotation[],
   draftResponses: DraftQuestionResponse[],
+  draftConcerns: DraftConcern[],
   submissionData: SubmissionData,
   // Authenticated stakeholders pass their Supabase user.id; rows are
   // tagged with user_id and anonymous_session_id is left null. Anonymous
@@ -238,7 +240,8 @@ export async function submitContributions(
   | { success: false; error: unknown }
 > {
   const sessionId = userId ? null : getAnonymousSessionId();
-  const totalCount = draftAnnotations.length + draftResponses.length;
+  const totalCount =
+    draftAnnotations.length + draftResponses.length + draftConcerns.length;
   // Stakeholder when authenticated OR when the anonymous form's role
   // self-identifies as one — keep the existing flag honored.
   const isStakeholder = !!userId || (submissionData.isStakeholder ?? false);
@@ -310,26 +313,96 @@ export async function submitContributions(
     }
   }
 
+  // 4. Fan out concern drafts. Concerns are PUBLIC — every user sees
+  // every concern — but they're still linked back to this submission
+  // via submission_id so the planner-side dashboards can attribute them.
+  if (draftConcerns.length > 0) {
+    const concernsToInsert = draftConcerns.map((d) => ({
+      location_id: locationId,
+      x_position: d.x,
+      y_position: d.y,
+      description: d.description,
+      category: d.category,
+      anonymous_session_id: sessionId,
+      user_id: userId,
+      submission_id: submissionId,
+      echo_count: 0,
+    }));
+
+    const { error: concernsError } = await supabase
+      .from("concerns")
+      .insert(concernsToInsert);
+
+    if (concernsError) {
+      console.error("Concerns insert failed:", concernsError);
+      return { success: false, error: concernsError };
+    }
+  }
+
   return { success: true, submission: { id: submissionId } };
 }
 
-// Returns { locationId → count } across all locations. Used by the
+// Echo = "I'm concerned too." A bare upvote on someone else's concern.
+// Tries the SQL RPC first (atomic increment); falls back to a non-atomic
+// fetch+update if the RPC isn't installed yet. Returns true on success.
+//
+// SQL to install the RPC once in the Supabase SQL editor:
+//
+//   CREATE OR REPLACE FUNCTION increment_concern_echo(concern_id UUID)
+//   RETURNS void AS $$
+//     UPDATE concerns SET echo_count = echo_count + 1 WHERE id = concern_id;
+//   $$ LANGUAGE SQL;
+export async function echoConcern(concernId: string): Promise<boolean> {
+  const { error } = await supabase.rpc("increment_concern_echo", {
+    concern_id: concernId,
+  });
+  if (!error) return true;
+
+  const { data } = await supabase
+    .from("concerns")
+    .select("echo_count")
+    .eq("id", concernId)
+    .single();
+  if (!data) return false;
+
+  const { error: updateError } = await supabase
+    .from("concerns")
+    .update({ echo_count: (data.echo_count ?? 0) + 1 })
+    .eq("id", concernId);
+
+  return !updateError;
+}
+
+// Returns { locationId → weight } across all locations. Used by the
 // explore page to decorate pins with a concern badge.
-export async function getConcernCountByLocation(): Promise<
+//
+// "Weight" = creator + echoers. Each row contributes (1 + echo_count)
+// to its location's total — so a single concern with 2 echoes counts
+// as 3 voices, not 1 row. The Explore badge, the location-page banner,
+// and the bottom-right pill all use this same metric for consistency.
+export async function getConcernWeightByLocation(): Promise<
   Record<string, number>
 > {
   const { data, error } = await supabase
     .from("concerns")
-    .select("location_id");
+    .select("location_id, echo_count");
 
   if (error) {
     console.error("Error counting concerns:", error);
     return {};
   }
 
-  const counts: Record<string, number> = {};
-  for (const row of (data ?? []) as { location_id: string }[]) {
-    counts[row.location_id] = (counts[row.location_id] ?? 0) + 1;
+  const weights: Record<string, number> = {};
+  for (const row of (data ?? []) as {
+    location_id: string;
+    echo_count: number | null;
+  }[]) {
+    const w = 1 + (row.echo_count ?? 0);
+    weights[row.location_id] = (weights[row.location_id] ?? 0) + w;
   }
-  return counts;
+  return weights;
 }
+
+// Back-compat alias. Older callers expected row counts; they now get
+// weights instead, which is the correct metric for badge display.
+export const getConcernCountByLocation = getConcernWeightByLocation;

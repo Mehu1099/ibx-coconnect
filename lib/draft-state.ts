@@ -21,9 +21,20 @@ export interface DraftQuestionResponse {
   createdAt: string;
 }
 
+export interface DraftConcern {
+  tempId: string;
+  x: number;
+  y: number;
+  description: string;
+  category: string;
+  createdAt: string;
+}
+
 const annotationsKey = (locationId: string) => `ibx-drafts-${locationId}`;
 const responsesKey = (locationId: string) =>
   `ibx-response-drafts-${locationId}`;
+const concernsKey = (locationId: string) =>
+  `ibx-concerns-drafts-${locationId}`;
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -80,6 +91,19 @@ export function saveDraftResponses(
   writeJSON(responsesKey(locationId), drafts);
 }
 
+// ── Draft concerns ──────────────────────────────────────────────────────────
+
+export function loadDraftConcerns(locationId: string): DraftConcern[] {
+  return readJSON<DraftConcern>(concernsKey(locationId));
+}
+
+export function saveDraftConcerns(
+  locationId: string,
+  drafts: DraftConcern[],
+): void {
+  writeJSON(concernsKey(locationId), drafts);
+}
+
 // ── Bulk clear (called after a successful submission) ──────────────────────
 
 export function clearAllDrafts(locationId: string): void {
@@ -87,6 +111,7 @@ export function clearAllDrafts(locationId: string): void {
   try {
     window.sessionStorage.removeItem(annotationsKey(locationId));
     window.sessionStorage.removeItem(responsesKey(locationId));
+    window.sessionStorage.removeItem(concernsKey(locationId));
   } catch {
     /* ignore */
   }

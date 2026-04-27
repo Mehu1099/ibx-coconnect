@@ -25,6 +25,7 @@ type Props = {
   open: boolean;
   draftAnnotationsCount: number;
   draftResponsesCount: number;
+  draftConcernsCount: number;
   onClose: () => void;
   /** Triggered when the user clicks "Back to neighborhood" from the
    *  celebration. Parent handles fade-out + navigation. */
@@ -36,6 +37,7 @@ export default function SubmissionModal({
   open,
   draftAnnotationsCount,
   draftResponsesCount,
+  draftConcernsCount,
   onClose,
   onNavigateAway,
   onSubmit,
@@ -47,6 +49,7 @@ export default function SubmissionModal({
           <ModalBody
             draftAnnotationsCount={draftAnnotationsCount}
             draftResponsesCount={draftResponsesCount}
+            draftConcernsCount={draftConcernsCount}
             onSubmit={onSubmit}
             onClose={onClose}
             onNavigateAway={onNavigateAway}
@@ -125,12 +128,14 @@ function ModalShell({
 function ModalBody({
   draftAnnotationsCount,
   draftResponsesCount,
+  draftConcernsCount,
   onSubmit,
   onClose,
   onNavigateAway,
 }: {
   draftAnnotationsCount: number;
   draftResponsesCount: number;
+  draftConcernsCount: number;
   onSubmit: (data: SubmissionData) => Promise<SubmitResult>;
   onClose: () => void;
   onNavigateAway: () => void;
@@ -145,12 +150,15 @@ function ModalBody({
   // view renders) — these locals preserve the numbers for the stats card.
   const [submittedSticky, setSubmittedSticky] = useState(0);
   const [submittedResponses, setSubmittedResponses] = useState(0);
-  const totalDraftCount = draftAnnotationsCount + draftResponsesCount;
+  const [submittedConcerns, setSubmittedConcerns] = useState(0);
+  const totalDraftCount =
+    draftAnnotationsCount + draftResponsesCount + draftConcernsCount;
 
   const handleSubmit = async () => {
     if (!role || !ageRange) return;
     setSubmittedSticky(draftAnnotationsCount);
     setSubmittedResponses(draftResponsesCount);
+    setSubmittedConcerns(draftConcernsCount);
     setStage("submitting");
     setErrorMessage(null);
     const result = await onSubmit({
@@ -176,6 +184,7 @@ function ModalBody({
   const handleStakeholderSubmit = async () => {
     setSubmittedSticky(draftAnnotationsCount);
     setSubmittedResponses(draftResponsesCount);
+    setSubmittedConcerns(draftConcernsCount);
     setStage("submitting");
     setErrorMessage(null);
     const stakeholderRole: SubmissionRole = "planner_stakeholder";
@@ -213,6 +222,7 @@ function ModalBody({
             key="success"
             stickyCount={submittedSticky}
             responseCount={submittedResponses}
+            concernCount={submittedConcerns}
             role={role}
             ageRange={ageRange}
             onClose={onClose}
@@ -602,6 +612,7 @@ function FormView({
 function SuccessView({
   stickyCount,
   responseCount,
+  concernCount,
   role,
   ageRange,
   onClose,
@@ -609,12 +620,13 @@ function SuccessView({
 }: {
   stickyCount: number;
   responseCount: number;
+  concernCount: number;
   role: SubmissionRole | null;
   ageRange: SubmissionAgeRange | null;
   onClose: () => void;
   onNavigateAway: () => void;
 }) {
-  const total = stickyCount + responseCount;
+  const total = stickyCount + responseCount + concernCount;
   const roleLabel = role ? roleDisplay(role) : "—";
   const ageLabel = ageRange ? ageDisplay(ageRange) : "—";
 
@@ -692,7 +704,9 @@ function SuccessView({
         conversation. Planners will see your perspective.
       </motion.p>
 
-      {/* Stats recap card */}
+      {/* Stats recap card. Stat columns hide themselves when their
+          count is 0 so the card stays clean — e.g. concern-only
+          submissions don't show empty "0 STICKY NOTES". */}
       <motion.div
         className="flex items-stretch"
         style={{
@@ -706,19 +720,50 @@ function SuccessView({
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.35, delay: 0.35, ease: "easeOut" }}
       >
-        <Stat
-          big={String(stickyCount)}
-          label={
-            stickyCount === 1 ? "STICKY NOTE" : "STICKY NOTES"
+        {(() => {
+          const cells: React.ReactNode[] = [];
+          if (stickyCount > 0) {
+            cells.push(
+              <Stat
+                key="sticky"
+                big={String(stickyCount)}
+                label={stickyCount === 1 ? "STICKY NOTE" : "STICKY NOTES"}
+              />,
+            );
           }
-        />
-        <Divider />
-        <Stat
-          big={String(responseCount)}
-          label={responseCount === 1 ? "QUESTION" : "QUESTIONS"}
-        />
-        <Divider />
-        <Stat big={roleLabel} label={ageLabel} bigSize={14} />
+          if (responseCount > 0) {
+            cells.push(
+              <Stat
+                key="responses"
+                big={String(responseCount)}
+                label={responseCount === 1 ? "QUESTION" : "QUESTIONS"}
+              />,
+            );
+          }
+          if (concernCount > 0) {
+            cells.push(
+              <Stat
+                key="concerns"
+                big={String(concernCount)}
+                label={concernCount === 1 ? "CONCERN" : "CONCERNS"}
+              />,
+            );
+          }
+          cells.push(
+            <Stat
+              key="role"
+              big={roleLabel}
+              label={ageLabel}
+              bigSize={14}
+            />,
+          );
+          // Interleave dividers between cells.
+          return cells.reduce<React.ReactNode[]>((acc, cell, i) => {
+            if (i > 0) acc.push(<Divider key={`div-${i}`} />);
+            acc.push(cell);
+            return acc;
+          }, []);
+        })()}
       </motion.div>
 
       {/* Action buttons */}

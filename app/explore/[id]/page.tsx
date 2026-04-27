@@ -2,9 +2,11 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ActivityCounters from "@/components/explore/ActivityCounters";
 import CinematicPhoto from "@/components/explore/CinematicPhoto";
+import ConcernCreationModal from "@/components/explore/ConcernCreationModal";
+import ConcernMarker from "@/components/explore/ConcernMarker";
 import ConcernsBanner from "@/components/explore/ConcernsBanner";
 import FloatingQuestionCards from "@/components/explore/FloatingQuestionCards";
 import LocationToolbar, {
@@ -22,12 +24,14 @@ import TutorialOverlay, {
   type TutorialStep,
 } from "@/components/explore/TutorialOverlay";
 import {
+  echoConcern,
   loadAnnotations,
   loadQuestionResponses,
   submitContributions,
   type SubmissionData,
 } from "@/lib/annotations-api";
 import { useAuth } from "@/lib/auth-context";
+import type { ConcernCategory } from "@/lib/concern-categories";
 import type {
   DatabaseAnnotation,
   DatabaseQuestionResponse,
@@ -35,24 +39,28 @@ import type {
 import {
   clearAllDrafts,
   loadDraftAnnotations,
+  loadDraftConcerns,
   loadDraftResponses,
   makeDraftId,
   saveDraftAnnotations,
+  saveDraftConcerns,
   saveDraftResponses,
   type DraftAnnotation,
+  type DraftConcern,
   type DraftQuestionResponse,
 } from "@/lib/draft-state";
 import { EXPLORE_LOCATIONS } from "@/lib/explore-locations";
 import { PLANNER_QUESTIONS } from "@/lib/planner-questions";
+import { getAnonymousSessionId } from "@/lib/supabase-client";
+import { useRealtimeConcerns } from "@/lib/use-realtime-concerns";
 
 const NAVY = "#0B1D3A";
 const CREAM = "#EDE5D5";
 
 const TUTORIAL_STORAGE_KEY = "ibx-tutorial-completed";
 
-const PLACEHOLDER_TOOL_LABELS: Record<Exclude<ToolId, "sticky">, string> = {
+const PLACEHOLDER_TOOL_LABELS: Record<"sketch" | "ai", string> = {
   sketch: "Sketch",
-  concern: "Concern",
   ai: "AI Generate",
 };
 
@@ -105,13 +113,19 @@ export default function LocationPage() {
   const [submittedResponses, setSubmittedResponses] = useState<DatabaseQuestionResponse[]>([]);
   const [draftAnnotations, setDraftAnnotations] = useState<DraftAnnotation[]>([]);
   const [draftResponses, setDraftResponses] = useState<DraftQuestionResponse[]>([]);
+  const [draftConcerns, setDraftConcerns] = useState<DraftConcern[]>([]);
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [pendingNote, setPendingNote] = useState<{ x: number; y: number } | null>(null);
+  const [pendingConcern, setPendingConcern] = useState<{ x: number; y: number } | null>(null);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [tutorialStep, setTutorialStep] = useState<TutorialStep | null>(null);
   const [submissionModalOpen, setSubmissionModalOpen] = useState(false);
+
+  // Realtime concerns are PUBLIC — every browser sees the same feed. The
+  // hook handles initial load + INSERT/UPDATE subscriptions internally.
+  const { concerns: submittedConcerns } = useRealtimeConcerns(id);
 
   // Hydrate submitted from Supabase + drafts from sessionStorage. The
   // helpers swallow errors and return [] so the page stays usable when
@@ -142,12 +156,27 @@ export default function LocationPage() {
     });
     setDraftAnnotations(loadDraftAnnotations(id));
     setDraftResponses(loadDraftResponses(id));
+    setDraftConcerns(loadDraftConcerns(id));
     return () => {
       cancelled = true;
     };
   }, [id, userId, authLoading]);
 
-  const draftCount = draftAnnotations.length + draftResponses.length;
+  const draftCount =
+    draftAnnotations.length + draftResponses.length + draftConcerns.length;
+  // "Weight" = creator (1) + echoers (echo_count). Drafts contribute 1
+  // each; their authors haven't pushed them to Supabase yet so there
+  // are no echoes to count. The Explore badge, the banner here, and
+  // the bottom-right pill all share this metric.
+  const totalConcernWeight = useMemo(() => {
+    const submittedWeight = submittedConcerns.reduce(
+      (sum, c) => sum + 1 + (c.echo_count ?? 0),
+      0,
+    );
+    return submittedWeight + draftConcerns.length;
+  }, [submittedConcerns, draftConcerns]);
+  const anonSessionId =
+    typeof window !== "undefined" ? getAnonymousSessionId() : "";
 
   // Hydrate tutorial gate. Only show if the user has never completed it.
   useEffect(() => {
@@ -167,16 +196,12 @@ export default function LocationPage() {
   useEffect(() => {
     if (!toast) return;
     const isPlaceholder =
-      toast.startsWith("Sketch ") ||
-      toast.startsWith("Concern ") ||
-      toast.startsWith("AI Generate ");
+      toast.startsWith("Sketch ") || toast.startsWith("AI Generate ");
     const t = window.setTimeout(() => {
       setToast(null);
       if (isPlaceholder) {
         setActiveTool((current) =>
-          current === "sketch" || current === "concern" || current === "ai"
-            ? null
-            : current,
+          current === "sketch" || current === "ai" ? null : current,
         );
       }
     }, isPlaceholder ? 3000 : 1600);
@@ -225,8 +250,9 @@ export default function LocationPage() {
     setActiveTool(tool);
     setPendingNote(null);
     setSelectedNoteId(null);
+    setPendingConcern(null);
 
-    if (tool === "sketch" || tool === "concern" || tool === "ai") {
+    if (tool === "sketch" || tool === "ai") {
       setToast(
         `${PLACEHOLDER_TOOL_LABELS[tool]} — coming in next update, building this in Session 4!`,
       );
@@ -239,24 +265,26 @@ export default function LocationPage() {
 
   const handlePhotoClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (pendingNote) return;
+      if (pendingNote || pendingConcern) return;
       const el = photoRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 100;
       const y = ((e.clientY - rect.top) / rect.height) * 100;
+      const clampedX = Math.max(0, Math.min(100, Number(x.toFixed(2))));
+      const clampedY = Math.max(0, Math.min(100, Number(y.toFixed(2))));
 
       if (activeTool === "sticky") {
-        setPendingNote({
-          x: Math.max(0, Math.min(100, Number(x.toFixed(2)))),
-          y: Math.max(0, Math.min(100, Number(y.toFixed(2)))),
-        });
+        setPendingNote({ x: clampedX, y: clampedY });
+        setSelectedNoteId(null);
+      } else if (activeTool === "concern") {
+        setPendingConcern({ x: clampedX, y: clampedY });
         setSelectedNoteId(null);
       } else if (selectedNoteId) {
         setSelectedNoteId(null);
       }
     },
-    [activeTool, pendingNote, selectedNoteId],
+    [activeTool, pendingNote, pendingConcern, selectedNoteId],
   );
 
   // ── Draft sticky notes (local + sessionStorage) ──────────────────────────
@@ -312,6 +340,38 @@ export default function LocationPage() {
     [id],
   );
 
+  // ── Draft concerns (local + sessionStorage) ─────────────────────────────
+
+  const handleSaveConcern = useCallback(
+    (description: string, category: ConcernCategory) => {
+      if (!pendingConcern || !id) return;
+      const newDraft: DraftConcern = {
+        tempId: makeDraftId(),
+        x: pendingConcern.x,
+        y: pendingConcern.y,
+        description,
+        category,
+        createdAt: new Date().toISOString(),
+      };
+      setDraftConcerns((prev) => {
+        const next = [...prev, newDraft];
+        saveDraftConcerns(id, next);
+        return next;
+      });
+      setPendingConcern(null);
+    },
+    [pendingConcern, id],
+  );
+
+  // Echo a submitted concern. The realtime UPDATE subscription on
+  // `concerns` is what reflects the new echo_count back into the UI;
+  // we don't optimistically mutate state here. The marker also
+  // disables its echo button immediately on click so the realtime
+  // delay isn't visible to the clicker.
+  const handleEchoConcern = useCallback(async (concernId: string) => {
+    await echoConcern(concernId);
+  }, []);
+
   // ── Draft question responses (local + sessionStorage) ────────────────────
 
   const handleAddDraftResponse = useCallback(
@@ -335,6 +395,7 @@ export default function LocationPage() {
         id,
         draftAnnotations,
         draftResponses,
+        draftConcerns,
         data,
         userId,
       );
@@ -343,7 +404,8 @@ export default function LocationPage() {
       }
       // Re-fetch submitted from Supabase so the just-promoted drafts
       // appear in their final styling, then clear the drafts from
-      // both state and sessionStorage.
+      // both state and sessionStorage. Concerns aren't refetched here —
+      // the realtime hook will pick up the INSERTs and prepend them.
       const [annotationsData, responsesData] = await Promise.all([
         loadAnnotations(id, true, userId),
         loadQuestionResponses(id, true, userId),
@@ -354,10 +416,11 @@ export default function LocationPage() {
       setSubmittedResponses(responsesData);
       setDraftAnnotations([]);
       setDraftResponses([]);
+      setDraftConcerns([]);
       clearAllDrafts(id);
       return { success: true as const };
     },
-    [id, draftAnnotations, draftResponses, userId],
+    [id, draftAnnotations, draftResponses, draftConcerns, userId],
   );
 
   // ── Back navigation with fade-out ─────────────────────────────────────────
@@ -479,6 +542,45 @@ export default function LocationPage() {
               onUpdate={(content) => handleUpdateDraftNote(d.tempId, content)}
             />
           ))}
+
+          {/* Concerns are PUBLIC — every viewer sees the full feed.
+              The "isMyConcern" flag suppresses the echo button and
+              swaps in the muted "Your concern · N echoes" line for
+              rows the current viewer authored. */}
+          {submittedConcerns.map((c, i) => {
+            const mine = userId
+              ? c.user_id === userId
+              : c.anonymous_session_id === anonSessionId &&
+                c.user_id === null;
+            return (
+              <ConcernMarker
+                key={c.id}
+                concern={c}
+                index={i}
+                isMyConcern={mine}
+                onEcho={() => handleEchoConcern(c.id)}
+              />
+            );
+          })}
+
+          {/* Concern drafts — render with dashed inner ring just like
+              sticky-note drafts. They're "yours" by definition. */}
+          {draftConcerns.map((d, i) => (
+            <ConcernMarker
+              key={d.tempId}
+              concern={{
+                id: d.tempId,
+                x_position: d.x,
+                y_position: d.y,
+                description: d.description,
+                category: d.category,
+                echo_count: 0,
+              }}
+              index={submittedConcerns.length + i}
+              isDraft
+              isMyConcern
+            />
+          ))}
         </motion.div>
 
         {pendingNote && (
@@ -489,6 +591,15 @@ export default function LocationPage() {
             onCancel={() => setPendingNote(null)}
           />
         )}
+
+        {pendingConcern && (
+          <ConcernCreationModal
+            x={pendingConcern.x}
+            y={pendingConcern.y}
+            onSave={handleSaveConcern}
+            onCancel={() => setPendingConcern(null)}
+          />
+        )}
       </CinematicPhoto>
 
       {/* ── Top nav, concerns banner ────────────────────────────────────── */}
@@ -497,7 +608,7 @@ export default function LocationPage() {
         subtitle={location.description}
         onBack={handleBack}
       />
-      <ConcernsBanner count={3} />
+      {totalConcernWeight > 0 && <ConcernsBanner count={totalConcernWeight} />}
 
       {/* ── Always-visible planner question cards ───────────────────────── */}
       <FloatingQuestionCards
@@ -516,7 +627,10 @@ export default function LocationPage() {
         onToggleVisibility={handleToggleVisibility}
         tutorialHighlight={tutorialStep === 2}
       />
-      <ActivityCounters concerns={3} questions={4} />
+      <ActivityCounters
+        concerns={totalConcernWeight}
+        questions={submittedResponses.length + draftResponses.length}
+      />
 
       {/* ── Submit Contributions floating button ────────────────────────── */}
       <SubmitContributionsButton
@@ -533,7 +647,8 @@ export default function LocationPage() {
           submittedAnnotations.length === 0 &&
           submittedResponses.length === 0 &&
           draftAnnotations.length === 0 &&
-          draftResponses.length === 0
+          draftResponses.length === 0 &&
+          draftConcerns.length === 0
         }
       />
 
@@ -542,6 +657,7 @@ export default function LocationPage() {
         open={submissionModalOpen}
         draftAnnotationsCount={draftAnnotations.length}
         draftResponsesCount={draftResponses.length}
+        draftConcernsCount={draftConcerns.length}
         onClose={() => setSubmissionModalOpen(false)}
         onNavigateAway={() => {
           setSubmissionModalOpen(false);

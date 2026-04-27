@@ -40,7 +40,7 @@ export default function PersonalCanvasHint({ show }: Props) {
       transition={{ duration: 0.5, delay: 1, ease: "easeOut" }}
     >
       <span style={{ color: "#F47560", fontWeight: 600 }}>✦ </span>
-      This is your personal canvas — add your thoughts and submit when ready
+      This is your personal canvas — add notes, raise concerns, and submit when ready
     </motion.div>
   );
 }

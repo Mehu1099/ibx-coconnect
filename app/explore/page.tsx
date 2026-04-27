@@ -8,7 +8,6 @@ import IBXLineAnimation from "@/components/explore/IBXLineAnimation";
 import LocationPin from "@/components/explore/LocationPin";
 import PinAdminTool from "@/components/explore/PinAdminTool";
 import WelcomeText from "@/components/explore/WelcomeText";
-import { getConcernCountByLocation } from "@/lib/annotations-api";
 import {
   AXONOMETRIC_NATURAL_HEIGHT,
   AXONOMETRIC_NATURAL_WIDTH,
@@ -17,6 +16,7 @@ import {
   type ExploreLocation,
 } from "@/lib/explore-locations";
 import { useImageProjection } from "@/lib/use-image-projection";
+import { useRealtimeConcernCounts } from "@/lib/use-realtime-concerns";
 
 const SESSION_FLAG = "ibx-explore-animated";
 // Total length of the welcome sequence (intro + lines + pin stagger).
@@ -35,9 +35,11 @@ export default function ExplorePage() {
   // once `mounted` is true — they mount with the correct `instant`.
   const [mounted, setMounted] = useState(false);
   const [instant, setInstant] = useState(false);
-  // { locationId → count }, hydrated from Supabase. Empty object until
-  // the fetch resolves; pins render with 0 (badge hidden) in the meantime.
-  const [concernCounts, setConcernCounts] = useState<Record<string, number>>({});
+  // { locationId → count }, hydrated from Supabase + kept fresh by a
+  // realtime subscription. Empty object until the fetch resolves;
+  // pins render with 0 (badge hidden) in the meantime. Live INSERTs
+  // re-fetch automatically — no refresh needed.
+  const concernCounts = useRealtimeConcernCounts();
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
   const router = useRouter();
 
@@ -67,18 +69,6 @@ export default function ExplorePage() {
     return () => {
       window.removeEventListener("resize", check);
       window.removeEventListener("orientationchange", check);
-    };
-  }, []);
-
-  // Fire-and-forget. Errors are console-logged inside the helper; if
-  // the call fails we just leave concernCounts={} and no badges show.
-  useEffect(() => {
-    let cancelled = false;
-    getConcernCountByLocation().then((counts) => {
-      if (!cancelled) setConcernCounts(counts);
-    });
-    return () => {
-      cancelled = true;
     };
   }, []);
 
