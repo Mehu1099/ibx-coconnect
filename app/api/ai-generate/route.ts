@@ -78,23 +78,20 @@ export async function POST(req: NextRequest) {
     }
     recentGenerations.set(sessionId, Date.now());
 
-    // Wrap the user prompt with urban-planning + photographic context so
-    // the model produces something that reads like a real street photo
-    // rather than a hyper-stylised render. Keeping this in one place
-    // makes it easy to tune the model's voice across the whole feature.
-    const enhancedPrompt = `Photorealistic photograph of a New York City street scene. ${trimmed}. Maintain realistic urban architecture, lighting, and proportions. Documentary photography style, daylight.`;
-
+    // FLUX.2 Pro is an instruction-based image editor: it preserves the
+    // source photo's structure (buildings, perspective, lighting) and
+    // only changes what the prompt describes. We deliberately don't
+    // wrap the user's prompt with extra style hints — that pulled the
+    // earlier flux-dev attempt off the source image entirely.
     const prediction = await replicate.predictions.create({
-      model: "black-forest-labs/flux-dev",
+      model: "black-forest-labs/flux-2-pro",
       input: {
-        prompt: enhancedPrompt,
-        image: basePhotoUrl,
-        prompt_strength: 0.75,
-        num_outputs: 1,
-        guidance_scale: 3.5,
-        num_inference_steps: 28,
+        prompt: trimmed,
+        input_image: basePhotoUrl,
+        aspect_ratio: "match_input_image",
         output_format: "webp",
-        output_quality: 85,
+        output_quality: 90,
+        safety_tolerance: 2,
       },
     });
 

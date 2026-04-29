@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type GenerationProgress,
   useAIGeneration,
@@ -17,13 +17,28 @@ const FAINT_BORDER = "#E0DCD4";
 const MAX_PROMPT_LEN = 500;
 const MIN_PROMPT_LEN = 10;
 
-const SUGGESTIONS = [
-  "Add a protected bike lane",
-  "More street trees",
-  "Pedestrian plaza",
-  "Wider sidewalks with seating",
-  "Better lighting at night",
+// Edit-instruction style prompts. FLUX.2 Pro is built to preserve the
+// source photo and only change what the prompt asks for, so chips read
+// as imperative single-action edits rather than vague themes.
+const SUGGESTION_CHIPS = [
+  "Add green street trees along the sidewalks",
+  "Add a protected bike lane along the right curb",
+  "Replace street parking with outdoor seating",
+  "Add wider pedestrian crosswalks with planters",
+  "Add modern street lighting and benches",
+  "Convert one lane into a dedicated bus lane",
 ];
+
+// Cycled through during the generating stage. FLUX.2 Pro takes ~9s
+// warm and 30s cold — the messages need to fill that range without
+// looping too quickly.
+const LOADING_MESSAGES = [
+  "Analyzing the location photo...",
+  "Reimagining this corner of Flatbush...",
+  "Adding the requested changes...",
+  "Refining the details...",
+];
+const LOADING_MESSAGE_INTERVAL_MS = 4500;
 
 type Stage = "input" | "generating" | "result";
 
@@ -165,16 +180,12 @@ function ModalBody({
     }
   };
 
-  const handleAddSuggestion = (text: string) => {
-    setPrompt((prev) => {
-      const trimmed = prev.trim();
-      if (!trimmed) return text;
-      // Append with a separator if there's already content; cap at MAX.
-      const combined = `${trimmed}. ${text}`;
-      return combined.length > MAX_PROMPT_LEN
-        ? combined.slice(0, MAX_PROMPT_LEN)
-        : combined;
-    });
+  // Chips REPLACE the textarea contents rather than appending — repeated
+  // clicks would otherwise pile up into garbage prompts. The InputView
+  // owns the textarea ref and focuses (with cursor at end) right after
+  // so the user can immediately tweak the suggested wording.
+  const handlePickSuggestion = (text: string) => {
+    setPrompt(text.length > MAX_PROMPT_LEN ? text.slice(0, MAX_PROMPT_LEN) : text);
   };
 
   const handleRegenerate = () => {
@@ -230,7 +241,7 @@ function ModalBody({
           color: NAVY,
         }}
       >
-        Imagine the future
+        Reimagine this place
       </h2>
       <p
         style={{
@@ -240,7 +251,8 @@ function ModalBody({
           color: SLATE,
         }}
       >
-        Describe what you&apos;d like to see at this location.
+        Describe a change you&apos;d like to see. The AI will edit this photo
+        to show your vision.
       </p>
 
       <AnimatePresence mode="wait">
@@ -249,7 +261,7 @@ function ModalBody({
             key="input"
             prompt={prompt}
             onPromptChange={setPrompt}
-            onAddSuggestion={handleAddSuggestion}
+            onPickSuggestion={handlePickSuggestion}
             onGenerate={handleGenerate}
             canGenerate={canGenerate}
             error={error}
@@ -278,20 +290,39 @@ function ModalBody({
 function InputView({
   prompt,
   onPromptChange,
-  onAddSuggestion,
+  onPickSuggestion,
   onGenerate,
   canGenerate,
   error,
 }: {
   prompt: string;
   onPromptChange: (v: string) => void;
-  onAddSuggestion: (v: string) => void;
+  onPickSuggestion: (v: string) => void;
   onGenerate: () => void;
   canGenerate: boolean;
   error: string | null;
 }) {
   const length = prompt.length;
   const overLimit = length > MAX_PROMPT_LEN;
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Drives a brief coral border + scale pulse on the textarea after a
+  // chip is clicked, so the user can see where the inserted text went
+  // before they start typing.
+  const [pulseKey, setPulseKey] = useState(0);
+
+  const handleChipClick = (text: string) => {
+    onPickSuggestion(text);
+    setPulseKey((k) => k + 1);
+    // Defer focus to next tick so the parent state has flushed and the
+    // selection lands at the (now-updated) end of the value.
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      const end = el.value.length;
+      el.setSelectionRange(end, end);
+    });
+  };
 
   return (
     <motion.div
@@ -300,12 +331,17 @@ function InputView({
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
     >
-      <textarea
+      <motion.textarea
+        ref={textareaRef}
+        key={`textarea-${pulseKey}`}
         value={prompt}
         onChange={(e) => onPromptChange(e.target.value)}
-        placeholder="Add a protected bike lane and street trees... Replace parking with a pocket park... Wider sidewalks with seating and lighting..."
+        placeholder="Describe a change you'd like to see. For example: Add green street trees lining the sidewalks. Replace the parking with a wide pedestrian plaza. Add a protected bike lane along the right side of the street."
         rows={3}
         maxLength={MAX_PROMPT_LEN + 50}
+        initial={pulseKey === 0 ? false : { scale: 1 }}
+        animate={pulseKey === 0 ? undefined : { scale: [1, 1.01, 1] }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
         style={{
           marginTop: 18,
           width: "100%",
@@ -348,11 +384,11 @@ function InputView({
           gap: 6,
         }}
       >
-        {SUGGESTIONS.map((s) => (
+        {SUGGESTION_CHIPS.map((s) => (
           <button
             type="button"
             key={s}
-            onClick={() => onAddSuggestion(s)}
+            onClick={() => handleChipClick(s)}
             className="cursor-pointer rounded-full"
             style={{
               background: "#FFFFFF",
@@ -373,7 +409,7 @@ function InputView({
               e.currentTarget.style.background = "#FFFFFF";
             }}
           >
-            + {s}
+            {s}
           </button>
         ))}
       </div>
@@ -443,12 +479,24 @@ function InputView({
 // ── Generating ─────────────────────────────────────────────────────────────
 
 function GeneratingView({ progress }: { progress: GenerationProgress }) {
+  // Cycle through LOADING_MESSAGES every ~4.5s during the long
+  // "processing" phase. Keep the dedicated copy for the short
+  // bookends so the bar's intent stays legible.
+  const [messageIndex, setMessageIndex] = useState(0);
+  useEffect(() => {
+    if (progress !== "processing") return;
+    const t = window.setInterval(() => {
+      setMessageIndex((i) => (i + 1) % LOADING_MESSAGES.length);
+    }, LOADING_MESSAGE_INTERVAL_MS);
+    return () => window.clearInterval(t);
+  }, [progress]);
+
   const message =
     progress === "starting"
       ? "Starting up the AI..."
       : progress === "finalizing"
         ? "Adding the finishing touches..."
-        : "Reimagining this corner of Flatbush...";
+        : LOADING_MESSAGES[messageIndex];
 
   return (
     <motion.div
@@ -515,7 +563,7 @@ function GeneratingView({ progress }: { progress: GenerationProgress }) {
           textAlign: "center",
         }}
       >
-        This usually takes 15–30 seconds.
+        This usually takes 10–30 seconds.
       </div>
     </motion.div>
   );

@@ -22,10 +22,20 @@ type Item = {
 type Props = {
   proposals: DatabaseAIProposal[];
   draftProposals: DraftAIProposal[];
+  onDeleteDraft: (tempId: string) => void;
 };
 
-export default function AIProposalsPanel({ proposals, draftProposals }: Props) {
+export default function AIProposalsPanel({
+  proposals,
+  draftProposals,
+  onDeleteDraft,
+}: Props) {
   const [expanded, setExpanded] = useState<Item | null>(null);
+
+  const handleDeleteDraft = (tempId: string) => {
+    onDeleteDraft(tempId);
+    setExpanded((curr) => (curr && curr.id === tempId ? null : curr));
+  };
 
   const items: Item[] = [
     ...draftProposals.map((d) => ({
@@ -79,10 +89,20 @@ export default function AIProposalsPanel({ proposals, draftProposals }: Props) {
         </div>
 
         {items.map((item, i) => (
-          <motion.button
-            type="button"
+          // motion.div (not button) so we can nest the delete <button>
+          // for drafts without invalid HTML. Keyboard support via
+          // role + tabIndex + onKeyDown.
+          <motion.div
             key={item.id}
+            role="button"
+            tabIndex={0}
             onClick={() => setExpanded(item)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setExpanded(item);
+              }
+            }}
             className="cursor-pointer"
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
@@ -100,6 +120,7 @@ export default function AIProposalsPanel({ proposals, draftProposals }: Props) {
               color: NAVY,
               opacity: item.isDraft ? 0.96 : 1,
               position: "relative",
+              outline: "none",
             }}
             whileHover={{
               scale: 1.03,
@@ -147,6 +168,53 @@ export default function AIProposalsPanel({ proposals, draftProposals }: Props) {
                   Draft
                 </span>
               )}
+              {item.isDraft && (
+                <button
+                  type="button"
+                  aria-label="Delete draft"
+                  title="Delete draft"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteDraft(item.id);
+                  }}
+                  style={{
+                    position: "absolute",
+                    top: 6,
+                    right: 6,
+                    width: 22,
+                    height: 22,
+                    borderRadius: "50%",
+                    background: "rgba(11, 29, 58, 0.7)",
+                    border: "1.5px solid white",
+                    color: "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    padding: 0,
+                    transition:
+                      "background 0.15s ease, border-color 0.15s ease, transform 0.15s ease",
+                    zIndex: 2,
+                    lineHeight: 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    const t = e.currentTarget;
+                    t.style.background = "#E63946";
+                    t.style.borderColor = "#E63946";
+                    t.style.transform = "scale(1.1)";
+                  }}
+                  onMouseLeave={(e) => {
+                    const t = e.currentTarget;
+                    t.style.background = "rgba(11, 29, 58, 0.7)";
+                    t.style.borderColor = "white";
+                    t.style.transform = "scale(1)";
+                  }}
+                >
+                  ×
+                </button>
+              )}
             </div>
             <div
               style={{
@@ -163,20 +231,38 @@ export default function AIProposalsPanel({ proposals, draftProposals }: Props) {
             >
               {item.prompt}
             </div>
-          </motion.button>
+          </motion.div>
         ))}
       </div>
 
       <AnimatePresence>
         {expanded && (
-          <Lightbox item={expanded} onClose={() => setExpanded(null)} />
+          <Lightbox
+            item={expanded}
+            onClose={() => setExpanded(null)}
+            onDiscard={
+              expanded.isDraft
+                ? () => handleDeleteDraft(expanded.id)
+                : undefined
+            }
+          />
         )}
       </AnimatePresence>
     </>
   );
 }
 
-function Lightbox({ item, onClose }: { item: Item; onClose: () => void }) {
+function Lightbox({
+  item,
+  onClose,
+  onDiscard,
+}: {
+  item: Item;
+  onClose: () => void;
+  // Only set for drafts. Submitted proposals are part of the public
+  // record and shouldn't expose a discard affordance here.
+  onDiscard?: () => void;
+}) {
   return (
     <>
       <motion.div
@@ -286,7 +372,7 @@ function Lightbox({ item, onClose }: { item: Item; onClose: () => void }) {
               gap: 12,
             }}
           >
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
                   fontSize: 10,
@@ -310,6 +396,40 @@ function Lightbox({ item, onClose }: { item: Item; onClose: () => void }) {
                 “{item.prompt}”
               </div>
             </div>
+            {onDiscard && (
+              <button
+                type="button"
+                onClick={onDiscard}
+                className="cursor-pointer rounded-full"
+                style={{
+                  flexShrink: 0,
+                  background: "transparent",
+                  color: "#E63946",
+                  border: "1px solid rgba(230, 57, 70, 0.4)",
+                  padding: "8px 14px",
+                  fontFamily: "inherit",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  alignSelf: "center",
+                  transition:
+                    "background 0.15s ease, border-color 0.15s ease, color 0.15s ease",
+                }}
+                onMouseEnter={(e) => {
+                  const t = e.currentTarget;
+                  t.style.background = "#E63946";
+                  t.style.borderColor = "#E63946";
+                  t.style.color = "#FFFFFF";
+                }}
+                onMouseLeave={(e) => {
+                  const t = e.currentTarget;
+                  t.style.background = "transparent";
+                  t.style.borderColor = "rgba(230, 57, 70, 0.4)";
+                  t.style.color = "#E63946";
+                }}
+              >
+                Discard
+              </button>
+            )}
           </div>
         </div>
       </motion.div>

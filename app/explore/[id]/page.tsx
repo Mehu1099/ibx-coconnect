@@ -326,6 +326,22 @@ export default function LocationPage() {
     [id],
   );
 
+  // Drop a draft AI proposal before submission. The Supabase Storage
+  // file generated for it is intentionally left in place — clean-up
+  // would need a server-side route since the storage policy doesn't
+  // grant delete from the client. Cheap enough to leave for now.
+  const handleDeleteDraftAIProposal = useCallback(
+    (tempId: string) => {
+      if (!id) return;
+      setDraftAIProposals((prev) => {
+        const next = prev.filter((d) => d.tempId !== tempId);
+        saveDraftAIProposals(id, next);
+        return next;
+      });
+    },
+    [id],
+  );
+
   // ── Photo click → maybe start a new sticky note + tutorial advance ──────
 
   const handlePhotoClick = useCallback(
@@ -795,6 +811,7 @@ export default function LocationPage() {
       <AIProposalsPanel
         proposals={submittedAIProposals}
         draftProposals={draftAIProposals}
+        onDeleteDraft={handleDeleteDraftAIProposal}
       />
 
       {/* ── Toolbar + counters ──────────────────────────────────────────── */}
