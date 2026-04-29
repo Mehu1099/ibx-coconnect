@@ -29,13 +29,13 @@ const SUGGESTION_CHIPS = [
   "Convert one lane into a dedicated bus lane",
 ];
 
-// Cycled through during the generating stage. FLUX.2 Pro takes ~9s
-// warm and 30s cold — the messages need to fill that range without
-// looping too quickly.
+// Cycled through during the generating stage. FLUX Kontext Max takes
+// ~15–30s typically and up to ~45s on cold start, so the messages
+// need to fill that range without looping too quickly.
 const LOADING_MESSAGES = [
-  "Analyzing the location photo...",
+  "Reading the location photo...",
   "Reimagining this corner of Flatbush...",
-  "Adding the requested changes...",
+  "Making the requested changes...",
   "Refining the details...",
 ];
 const LOADING_MESSAGE_INTERVAL_MS = 4500;
@@ -563,7 +563,7 @@ function GeneratingView({ progress }: { progress: GenerationProgress }) {
           textAlign: "center",
         }}
       >
-        This usually takes 10–30 seconds.
+        This usually takes 15–30 seconds.
       </div>
     </motion.div>
   );

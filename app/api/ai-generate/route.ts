@@ -139,47 +139,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // FLUX.2 Pro is an instruction-based image editor: it preserves the
-    // source photo's structure (buildings, perspective, lighting) and
-    // only changes what the prompt describes. We deliberately don't
-    // wrap the user's prompt with extra style hints — that pulled the
-    // earlier flux-dev attempt off the source image entirely.
+    // FLUX Kontext Max is purpose-built for image editing on Replicate:
+    // it treats input_image as the BASE to edit and only modifies what
+    // the prompt describes. FLUX.2 Pro on Replicate treated input_image
+    // as a loose inspiration reference and produced unrelated scenes.
     //
-    // aspect_ratio is intentionally OMITTED — passing
-    // "match_input_image" was tripping FLUX.2 Pro's pre-validation with
-    // "requires at least one input image" before it actually inspected
-    // input_image. With it removed, the model infers output dimensions
-    // from input_image automatically.
-    //
-    // If input_image still doesn't reach the model, try one of these
-    // alternative parameter names (some Replicate deployments differ):
-    //   1. image_url: basePhotoUrl   (Together AI-style)
-    //   2. image: basePhotoUrl       (older Replicate convention)
-    //   3. images: [basePhotoUrl]    (array form)
-    //   4. input_images: [basePhotoUrl]  (multi-reference array)
+    // CRITICAL: pass ONLY prompt and input_image. Per Replicate's
+    // official Kontext example, extra parameters (aspect_ratio,
+    // output_format, safety_tolerance, guidance_scale, etc.) can cause
+    // a silent fallback to text-to-image mode where the input image is
+    // ignored entirely.
+    console.log("[ai-generate] Sending to Replicate (FLUX Kontext Max):", {
+      prompt:
+        trimmed.length > 100 ? `${trimmed.substring(0, 100)}...` : trimmed,
+      input_image: basePhotoUrl,
+    });
+
     const prediction = await replicate.predictions.create({
-      model: "black-forest-labs/flux-2-pro",
+      model: "black-forest-labs/flux-kontext-max",
       input: {
         prompt: trimmed,
         input_image: basePhotoUrl,
-        output_format: "webp",
-        output_quality: 90,
-        safety_tolerance: 2,
       },
     });
 
     console.log("[ai-generate] Replicate prediction created:", {
       predictionId: prediction.id,
       status: prediction.status,
-      model: "black-forest-labs/flux-2-pro",
-      // Drop this URL into a browser to inspect the exact input
-      // Replicate received and the run logs/error if any.
+      // Drop this URL into a browser (logged in to Replicate) to
+      // inspect the exact input the model received and the run logs.
       dashboardUrl: `https://replicate.com/p/${prediction.id}`,
-      inputSent: {
-        prompt:
-          trimmed.length > 80 ? `${trimmed.substring(0, 80)}...` : trimmed,
-        input_image: basePhotoUrl,
-      },
     });
 
     return NextResponse.json({
