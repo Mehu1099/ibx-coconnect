@@ -15,14 +15,16 @@ export interface GenerationResult {
   predictionId: string;
 }
 
-const POLL_INTERVAL_MS = 2000;
-const MAX_POLL_ATTEMPTS = 60; // 60 × 2s = 2 minutes
+// Roughly when we expect Gemini to be wrapping up. Used purely to
+// switch the user-facing copy from "processing" → "finalizing" so
+// the UI looks alive even though we're just sitting on one fetch.
+const FINALIZING_AFTER_MS = 18_000;
 
 export function useAIGeneration() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState<GenerationProgress>("idle");
   const [error, setError] = useState<string | null>(null);
-  // Guard against overlapping calls (e.g. double-clicked Generate button)
+  // Guard against overlapping calls (double-clicked Generate button).
   const inFlight = useRef(false);
 
   const generate = useCallback(
@@ -37,74 +39,66 @@ export function useAIGeneration() {
       setProgress("starting");
       setError(null);
 
+      // Mirrors the server log so a single browser tab can be
+      // correlated with the Vercel logs by the photo URL it sent.
+      console.log("[ai-generate] Sending request:", {
+        locationId,
+        basePhotoUrl,
+        promptLength: prompt.length,
+      });
+
+      // Cosmetic-only progress timers. Gemini is synchronous, so
+      // we don't actually know where it is — these just keep the
+      // copy in sync with elapsed time.
+      const toProcessing = window.setTimeout(
+        () => setProgress("processing"),
+        500,
+      );
+      const toFinalizing = window.setTimeout(
+        () => setProgress("finalizing"),
+        FINALIZING_AFTER_MS,
+      );
+
       try {
         const sessionId = getAnonymousSessionId();
 
-        // Mirrors the server log so a single browser tab can be
-        // correlated with the Vercel logs by the photo URL it sent.
-        console.log("[ai-generate] Sending request:", {
-          locationId,
-          basePhotoUrl,
-          promptLength: prompt.length,
-        });
-
-        const startResponse = await fetch("/api/ai-generate", {
+        const response = await fetch("/api/ai-generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ locationId, prompt, basePhotoUrl, sessionId }),
+          body: JSON.stringify({
+            locationId,
+            prompt,
+            basePhotoUrl,
+            sessionId,
+          }),
         });
 
-        if (!startResponse.ok) {
-          const errorData = await startResponse.json().catch(() => ({}));
-          throw new Error(errorData.error || "Failed to start generation");
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Generation failed");
         }
 
-        const { predictionId } = (await startResponse.json()) as {
-          predictionId: string;
+        const data = await response.json();
+
+        if (data.status !== "succeeded" || !data.imageUrl) {
+          throw new Error(data.error || "Generation failed");
+        }
+
+        return {
+          imageUrl: data.imageUrl,
+          storagePath: data.storagePath,
+          predictionId: data.predictionId,
         };
-
-        setProgress("processing");
-
-        for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, POLL_INTERVAL_MS),
-          );
-
-          const statusResponse = await fetch(
-            `/api/ai-generate/${predictionId}`,
-          );
-          const statusData = await statusResponse.json();
-
-          if (statusData.status === "succeeded") {
-            setProgress("idle");
-            setIsGenerating(false);
-            return {
-              imageUrl: statusData.imageUrl,
-              storagePath: statusData.storagePath,
-              predictionId,
-            };
-          }
-
-          if (statusData.status === "failed") {
-            throw new Error(statusData.error || "Generation failed");
-          }
-
-          // Last few polls — show "finalizing" so the spinner copy
-          // matches what the user is seeing (the model is mostly done).
-          if (attempt === MAX_POLL_ATTEMPTS - 5) {
-            setProgress("finalizing");
-          }
-        }
-
-        throw new Error("Generation timed out");
       } catch (err: unknown) {
         const message =
           err instanceof Error ? err.message : "Generation failed";
         setError(message);
-        setIsGenerating(false);
-        setProgress("idle");
         return null;
       } finally {
+        window.clearTimeout(toProcessing);
+        window.clearTimeout(toFinalizing);
+        setProgress("idle");
+        setIsGenerating(false);
         inFlight.current = false;
       }
     },

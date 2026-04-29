@@ -17,24 +17,23 @@ const FAINT_BORDER = "#E0DCD4";
 const MAX_PROMPT_LEN = 500;
 const MIN_PROMPT_LEN = 10;
 
-// Edit-instruction style prompts. FLUX.2 Pro is built to preserve the
-// source photo and only change what the prompt asks for, so chips read
-// as imperative single-action edits rather than vague themes.
+// Edit-instruction style prompts tuned for Gemini 3.1 Flash Image.
+// The model rewards explicit "keep ... unchanged" framing — these
+// chips bias toward concrete, single-edit instructions to make the
+// preserved-landmark behavior obvious.
 const SUGGESTION_CHIPS = [
-  "Add green street trees along the sidewalks",
-  "Add a protected bike lane along the right curb",
-  "Replace street parking with outdoor seating",
-  "Add wider pedestrian crosswalks with planters",
-  "Add modern street lighting and benches",
-  "Convert one lane into a dedicated bus lane",
+  "Add green street trees lining the sidewalks",
+  "Add a clearly visible green-painted bike lane along the right curb",
+  "Replace street parking with outdoor cafe seating and umbrellas",
+  "Add wide pedestrian crosswalks with planters and benches",
+  "Add modern street lighting with hanging string lights",
+  "Convert the right lane into a dedicated bus lane with green paint",
 ];
 
-// Cycled through during the generating stage. Nano Banana 2 is
-// Flash-tier — typically 8–15s, with the occasional cold start
-// pushing closer to 20s. Four messages × 4.5s covers the warm path
-// and gracefully repeats once if it runs longer.
+// Cycled through during the generating stage. Gemini 3.1 Flash Image
+// is typically 10–20s, occasionally up to ~30s on cold start.
 const LOADING_MESSAGES = [
-  "Reading the location photo...",
+  "Analyzing the location photo...",
   "Reasoning about your vision...",
   "Reimagining this corner of Flatbush...",
   "Adding the finishing touches...",
@@ -337,7 +336,7 @@ function InputView({
         key={`textarea-${pulseKey}`}
         value={prompt}
         onChange={(e) => onPromptChange(e.target.value)}
-        placeholder="Describe a change you'd like to see. For example: Add green street trees lining the sidewalks. Replace the parking with a wide pedestrian plaza. Add a protected bike lane along the right side of the street."
+        placeholder="Describe a change you'd like to see. For example: Add green street trees lining the sidewalks while keeping all buildings unchanged. Replace the parking lane with a wide pedestrian plaza."
         rows={3}
         maxLength={MAX_PROMPT_LEN + 50}
         initial={pulseKey === 0 ? false : { scale: 1 }}
@@ -564,7 +563,7 @@ function GeneratingView({ progress }: { progress: GenerationProgress }) {
           textAlign: "center",
         }}
       >
-        This usually takes 10–20 seconds.
+        This usually takes 10–30 seconds.
       </div>
     </motion.div>
   );
