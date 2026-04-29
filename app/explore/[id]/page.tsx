@@ -732,6 +732,7 @@ export default function LocationPage() {
                 concern={c}
                 index={i}
                 isMyConcern={mine}
+                isStakeholder={userId !== null}
                 onEcho={() => handleEchoConcern(c.id)}
               />
             );

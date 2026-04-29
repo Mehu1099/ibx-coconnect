@@ -64,6 +64,10 @@ type Props = {
    *  user_id for stakeholders or anon session id otherwise). Disables
    *  the echo affordance and shows a muted "Your concern · N echoes". */
   isMyConcern?: boolean;
+  /** True when the viewer is an authenticated stakeholder. Echoes are
+   *  a community-only mechanic — stakeholders observe rather than vote.
+   *  Replaces the echo button with a read-only "Stakeholder view" line. */
+  isStakeholder?: boolean;
   onEcho?: () => void;
 };
 
@@ -75,6 +79,7 @@ function ConcernMarkerInner({
   index,
   isDraft = false,
   isMyConcern = false,
+  isStakeholder = false,
   onEcho,
 }: Props) {
   const [hovered, setHovered] = useState(false);
@@ -236,7 +241,41 @@ function ConcernMarkerInner({
               {concern.description}
             </p>
 
-            {!isMyConcern && !isDraft && !echoed && (
+            {/* Stakeholder view — echoes are a community-only mechanic, so
+                authenticated viewers get a read-only label instead of the
+                button. The server RPC also rejects auth.uid() != null. */}
+            {isStakeholder && !isDraft && (
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  fontSize: 11,
+                  color: "#6B7A8C",
+                  fontStyle: "italic",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                Stakeholder view · {voices}{" "}
+                {voices === 1 ? "voice" : "voices"}
+              </p>
+            )}
+
+            {!isStakeholder && !isMyConcern && !isDraft && !echoed && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -268,7 +307,7 @@ function ConcernMarkerInner({
               </button>
             )}
 
-            {!isMyConcern && !isDraft && echoed && (
+            {!isStakeholder && !isMyConcern && !isDraft && echoed && (
               <p
                 style={{
                   margin: "8px 0 0",
