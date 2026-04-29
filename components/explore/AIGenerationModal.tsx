@@ -2,10 +2,8 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import {
-  type GenerationProgress,
-  useAIGeneration,
-} from "@/lib/use-ai-generation";
+import { AIProcessingScreen } from "@/components/explore/processing/AIProcessingScreen";
+import { useAIGeneration } from "@/lib/use-ai-generation";
 
 const NAVY = "#0B1D3A";
 const CORAL = "#F47560";
@@ -29,16 +27,6 @@ const SUGGESTION_CHIPS = [
   "Add modern street lighting with hanging string lights",
   "Convert the right lane into a dedicated bus lane with green paint",
 ];
-
-// Cycled through during the generating stage. Gemini 3.1 Flash Image
-// is typically 10–20s, occasionally up to ~30s on cold start.
-const LOADING_MESSAGES = [
-  "Analyzing the location photo...",
-  "Reasoning about your vision...",
-  "Reimagining this corner of Flatbush...",
-  "Adding the finishing touches...",
-];
-const LOADING_MESSAGE_INTERVAL_MS = 4500;
 
 type Stage = "input" | "generating" | "result";
 
@@ -65,83 +53,24 @@ export default function AIGenerationModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <ModalShell key="ai-modal" onClose={onClose}>
-          <ModalBody
-            locationId={locationId}
-            basePhotoUrl={basePhotoUrl}
-            onSave={onSave}
-            onClose={onClose}
-          />
-        </ModalShell>
+        <ModalRoot
+          key="ai-modal"
+          locationId={locationId}
+          basePhotoUrl={basePhotoUrl}
+          onSave={onSave}
+          onClose={onClose}
+        />
       )}
     </AnimatePresence>
   );
 }
 
-function ModalShell({
-  children,
-  onClose,
-}: {
-  children: React.ReactNode;
-  onClose: () => void;
-}) {
-  // Lock body scroll while open. Mirrors SubmissionModal.
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, []);
-
-  return (
-    <>
-      <motion.div
-        className="fixed inset-0"
-        style={{
-          zIndex: 130,
-          background: "rgba(11, 29, 58, 0.5)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-        }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.25, ease: "easeOut" }}
-        onClick={onClose}
-      />
-      <motion.div
-        className="fixed flex items-center justify-center"
-        style={{ inset: 0, zIndex: 135, padding: 16, pointerEvents: "none" }}
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-      >
-        <div
-          style={{
-            pointerEvents: "auto",
-            width: "min(580px, 100%)",
-            background: CREAM,
-            borderRadius: 20,
-            padding: 28,
-            boxShadow: "0 24px 60px rgba(0, 0, 0, 0.20)",
-            fontFamily: "var(--font-space-grotesk)",
-            color: NAVY,
-            position: "relative",
-            maxHeight: "calc(100vh - 32px)",
-            overflowY: "auto",
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {children}
-        </div>
-      </motion.div>
-    </>
-  );
-}
-
-function ModalBody({
+// Top-level root that owns `stage` so the shell can animate its
+// dimensions in response to stage changes. The header chrome (close
+// button + label + title + subtitle) is hidden during the generating
+// stage because <AIProcessingScreen /> ships its own top bar with a
+// dedicated cancel button.
+function ModalRoot({
   locationId,
   basePhotoUrl,
   onSave,
@@ -160,7 +89,20 @@ function ModalBody({
     predictionId: string;
     prompt: string;
   } | null>(null);
-  const { generate, progress, error, clearError } = useAIGeneration();
+  // True the moment generate() resolves successfully. Drives the
+  // processing screen's progress bar from 95% → 100% before we
+  // transition to the result view (the brief "landed" beat).
+  const [generationCompleted, setGenerationCompleted] = useState(false);
+  const { generate, cancel, error, clearError } = useAIGeneration();
+
+  // Lock body scroll while open. Mirrors SubmissionModal.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   const trimmedLen = prompt.trim().length;
   const canGenerate =
@@ -169,16 +111,32 @@ function ModalBody({
   const handleGenerate = async () => {
     if (!canGenerate) return;
     clearError();
+    setGenerationCompleted(false);
     setStage("generating");
     const out = await generate(locationId, prompt.trim(), basePhotoUrl);
     if (out) {
+      // Let the processing screen's progress bar finish climbing to
+      // 100% before we swap in the result. ~600ms matches the
+      // synthetic 95→100% climb in AIProcessingScreen.
+      setGenerationCompleted(true);
       setResult({ ...out, prompt: prompt.trim() });
-      setStage("result");
+      window.setTimeout(() => setStage("result"), 600);
     } else {
-      // generate() set the error; revert to input so the user can retry.
+      // generate() either errored or was cancelled. Cancellation
+      // closes the modal entirely (handled in handleCancel); errors
+      // surface inline by reverting to the input view.
       setStage("input");
     }
   };
+
+  const handleCancel = () => {
+    cancel();
+    setStage("input");
+    setGenerationCompleted(false);
+    onClose();
+  };
+
+  const isGenerating = stage === "generating";
 
   // Chips REPLACE the textarea contents rather than appending — repeated
   // clicks would otherwise pile up into garbage prompts. The InputView
@@ -215,72 +173,154 @@ function ModalBody({
 
   return (
     <>
-      <CloseButton onClick={onClose} />
+      {/* Backdrop. Clicking it closes the modal in input/result, but
+          NOT during generating — we don't want a stray click to abort
+          a 20-second AI run. The cancel button in the processing
+          screen is the only way out during generation. */}
+      <motion.div
+        className="fixed inset-0"
+        style={{
+          zIndex: 130,
+          background: "rgba(11, 29, 58, 0.5)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+        }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        onClick={() => {
+          if (!isGenerating) onClose();
+        }}
+      />
 
-      <div className="flex items-center" style={{ gap: 8 }}>
-        <SparkleDot />
-        <span
+      {/* Centered card. Width / padding / maxHeight animate based on
+          stage so the modal expands gracefully when the rich
+          processing scene takes over and contracts back for input /
+          result. */}
+      <motion.div
+        className="fixed flex items-center justify-center"
+        style={{ inset: 0, zIndex: 135, padding: 16, pointerEvents: "none" }}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      >
+        <motion.div
+          onClick={(e) => e.stopPropagation()}
+          initial={false}
+          animate={{
+            width: isGenerating
+              ? "min(860px, 100%)"
+              : "min(580px, 100%)",
+            height: isGenerating ? 580 : "auto",
+            padding: isGenerating ? 0 : 28,
+          }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
           style={{
-            fontSize: 11,
-            fontWeight: 500,
-            letterSpacing: "0.6px",
-            textTransform: "uppercase",
-            color: CORAL,
+            pointerEvents: "auto",
+            background: isGenerating ? "transparent" : CREAM,
+            borderRadius: 20,
+            boxShadow: "0 24px 60px rgba(0, 0, 0, 0.20)",
+            fontFamily: "var(--font-space-grotesk)",
+            color: NAVY,
+            position: "relative",
+            maxHeight: "calc(100vh - 32px)",
+            overflow: "hidden",
           }}
         >
-          AI Proposal
-        </span>
-      </div>
+          <AnimatePresence mode="wait">
+            {!isGenerating && (
+              <motion.div
+                key="chrome"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+              >
+                <CloseButton onClick={onClose} />
 
-      <h2
-        style={{
-          marginTop: 8,
-          fontSize: 22,
-          fontWeight: 500,
-          lineHeight: 1.2,
-          color: NAVY,
-        }}
-      >
-        Reimagine this place
-      </h2>
-      <p
-        style={{
-          marginTop: 6,
-          fontSize: 13,
-          lineHeight: 1.5,
-          color: SLATE,
-        }}
-      >
-        Describe a change you&apos;d like to see. The AI will edit this photo
-        to show your vision.
-      </p>
+                <div className="flex items-center" style={{ gap: 8 }}>
+                  <SparkleDot />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 500,
+                      letterSpacing: "0.6px",
+                      textTransform: "uppercase",
+                      color: CORAL,
+                    }}
+                  >
+                    AI Proposal
+                  </span>
+                </div>
 
-      <AnimatePresence mode="wait">
-        {stage === "input" && (
-          <InputView
-            key="input"
-            prompt={prompt}
-            onPromptChange={setPrompt}
-            onPickSuggestion={handlePickSuggestion}
-            onGenerate={handleGenerate}
-            canGenerate={canGenerate}
-            error={error}
-          />
-        )}
-        {stage === "generating" && (
-          <GeneratingView key="generating" progress={progress} />
-        )}
-        {stage === "result" && result && (
-          <ResultView
-            key="result"
-            imageUrl={result.imageUrl}
-            prompt={result.prompt}
-            onKeep={handleKeep}
-            onRegenerate={handleRegenerate}
-            onDiscard={handleDiscard}
-          />
-        )}
-      </AnimatePresence>
+                <h2
+                  style={{
+                    marginTop: 8,
+                    fontSize: 22,
+                    fontWeight: 500,
+                    lineHeight: 1.2,
+                    color: NAVY,
+                  }}
+                >
+                  Reimagine this place
+                </h2>
+                <p
+                  style={{
+                    marginTop: 6,
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    color: SLATE,
+                  }}
+                >
+                  Describe a change you&apos;d like to see. The AI will edit
+                  this photo to show your vision.
+                </p>
+
+                {stage === "input" && (
+                  <InputView
+                    prompt={prompt}
+                    onPromptChange={setPrompt}
+                    onPickSuggestion={handlePickSuggestion}
+                    onGenerate={handleGenerate}
+                    canGenerate={canGenerate}
+                    error={error}
+                  />
+                )}
+                {stage === "result" && result && (
+                  <ResultView
+                    imageUrl={result.imageUrl}
+                    prompt={result.prompt}
+                    onKeep={handleKeep}
+                    onRegenerate={handleRegenerate}
+                    onDiscard={handleDiscard}
+                  />
+                )}
+              </motion.div>
+            )}
+
+            {isGenerating && (
+              <motion.div
+                key="processing"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25, ease: "easeOut" }}
+                style={{ width: "100%", height: "100%" }}
+              >
+                <AIProcessingScreen
+                  basePhotoUrl={basePhotoUrl}
+                  locationId={locationId}
+                  prompt={prompt.trim()}
+                  isCompleted={generationCompleted}
+                  onCancel={handleCancel}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </motion.div>
     </>
   );
 }
@@ -476,124 +516,9 @@ function InputView({
   );
 }
 
-// ── Generating ─────────────────────────────────────────────────────────────
-
-function GeneratingView({ progress }: { progress: GenerationProgress }) {
-  // Cycle through LOADING_MESSAGES every ~4.5s during the long
-  // "processing" phase. Keep the dedicated copy for the short
-  // bookends so the bar's intent stays legible.
-  const [messageIndex, setMessageIndex] = useState(0);
-  useEffect(() => {
-    if (progress !== "processing") return;
-    const t = window.setInterval(() => {
-      setMessageIndex((i) => (i + 1) % LOADING_MESSAGES.length);
-    }, LOADING_MESSAGE_INTERVAL_MS);
-    return () => window.clearInterval(t);
-  }, [progress]);
-
-  const message =
-    progress === "starting"
-      ? "Starting up the AI..."
-      : progress === "finalizing"
-        ? "Adding the finishing touches..."
-        : LOADING_MESSAGES[messageIndex];
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
-      style={{
-        marginTop: 24,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 18,
-        padding: "24px 0",
-      }}
-    >
-      <motion.div
-        style={{
-          color: CORAL,
-          willChange: "transform",
-        }}
-        animate={{
-          rotate: 360,
-          scale: [1, 1.12, 1],
-        }}
-        transition={{
-          rotate: {
-            duration: 6,
-            repeat: Infinity,
-            ease: "linear",
-          },
-          scale: {
-            duration: 2,
-            repeat: Infinity,
-            ease: "easeInOut",
-          },
-        }}
-      >
-        <SparkleIcon size={56} />
-      </motion.div>
-
-      <motion.div
-        key={message}
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-        style={{
-          fontSize: 14,
-          fontWeight: 500,
-          color: NAVY,
-          textAlign: "center",
-          minHeight: 22,
-        }}
-      >
-        {message}
-      </motion.div>
-
-      <ShimmerBar />
-
-      <div
-        style={{
-          fontSize: 11,
-          color: SLATE,
-          textAlign: "center",
-        }}
-      >
-        This usually takes 10–30 seconds.
-      </div>
-    </motion.div>
-  );
-}
-
-function ShimmerBar() {
-  return (
-    <div
-      style={{
-        width: "60%",
-        height: 4,
-        background: FAINT_BORDER,
-        borderRadius: 9999,
-        overflow: "hidden",
-        position: "relative",
-      }}
-    >
-      <motion.div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: `linear-gradient(90deg, transparent 0%, ${CORAL} 50%, transparent 100%)`,
-          willChange: "transform",
-        }}
-        animate={{ x: ["-100%", "100%"] }}
-        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-      />
-    </div>
-  );
-}
+// Generating stage now handled by <AIProcessingScreen /> from
+// components/explore/processing/. The previous GeneratingView +
+// ShimmerBar lived here.
 
 // ── Result ─────────────────────────────────────────────────────────────────
 

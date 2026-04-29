@@ -26,6 +26,11 @@ export function useAIGeneration() {
   const [error, setError] = useState<string | null>(null);
   // Guard against overlapping calls (double-clicked Generate button).
   const inFlight = useRef(false);
+  // AbortController for the current /api/ai-generate fetch. Set when
+  // generate() starts, cleared when it finishes or is cancelled. The
+  // server keeps charging Gemini even after we abort, but at least
+  // we don't write the resulting image to Storage on this side.
+  const abortRef = useRef<AbortController | null>(null);
 
   const generate = useCallback(
     async (
@@ -38,6 +43,9 @@ export function useAIGeneration() {
       setIsGenerating(true);
       setProgress("starting");
       setError(null);
+
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       // Mirrors the server log so a single browser tab can be
       // correlated with the Vercel logs by the photo URL it sent.
@@ -71,6 +79,7 @@ export function useAIGeneration() {
             basePhotoUrl,
             sessionId,
           }),
+          signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -90,6 +99,12 @@ export function useAIGeneration() {
           predictionId: data.predictionId,
         };
       } catch (err: unknown) {
+        // User-cancelled fetches surface as DOMException("AbortError").
+        // Silent reset — no error banner, the modal already closed.
+        const isAbort =
+          (err instanceof DOMException && err.name === "AbortError") ||
+          (err instanceof Error && err.name === "AbortError");
+        if (isAbort) return null;
         const message =
           err instanceof Error ? err.message : "Generation failed";
         setError(message);
@@ -100,12 +115,18 @@ export function useAIGeneration() {
         setProgress("idle");
         setIsGenerating(false);
         inFlight.current = false;
+        if (abortRef.current === controller) abortRef.current = null;
       }
     },
     [],
   );
 
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  }, []);
+
   const clearError = useCallback(() => setError(null), []);
 
-  return { generate, isGenerating, progress, error, clearError };
+  return { generate, cancel, isGenerating, progress, error, clearError };
 }
