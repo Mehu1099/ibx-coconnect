@@ -60,180 +60,230 @@ export default function AIProposalsPanel({
 
   return (
     <>
+      {/* Outer wrapper: fixed-position rail. The counter sits OUTSIDE
+          the scroll container so it doesn't scroll away with the
+          thumbnails, and so the mask gradient on the scroll container
+          doesn't fade out the label as soon as it's at the top edge. */}
       <div
-        className="fixed"
         style={{
+          position: "fixed",
           left: 24,
-          top: "25%",
-          width: 200,
+          top: "20%",
+          width: 220,
+          maxHeight: "calc(80vh - 100px)",
+          zIndex: 15,
+          fontFamily: "var(--font-space-grotesk)",
+          pointerEvents: "auto",
           display: "flex",
           flexDirection: "column",
-          gap: 12,
-          zIndex: 30,
-          maxHeight: "60vh",
-          overflowY: "auto",
-          fontFamily: "var(--font-space-grotesk)",
         }}
       >
         <div
           style={{
+            paddingLeft: 4,
+            marginBottom: 8,
             fontSize: 10,
-            fontWeight: 500,
+            fontWeight: 600,
             letterSpacing: "0.6px",
             textTransform: "uppercase",
             color: SLATE,
-            paddingLeft: 4,
           }}
         >
           AI Proposals · {items.length}
         </div>
 
-        {items.map((item, i) => (
-          // motion.div (not button) so we can nest the delete <button>
-          // for drafts without invalid HTML. Keyboard support via
-          // role + tabIndex + onKeyDown.
-          <motion.div
-            key={item.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => setExpanded(item)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setExpanded(item);
-              }
-            }}
-            className="cursor-pointer"
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, delay: i * 0.04, ease: "easeOut" }}
+        {/* Scroll container. Native scrollbar is hidden via the
+            `.ai-proposals-scroll` class below (see <style jsx>); the
+            mask-image gradient on top + bottom edges fades content
+            in/out so the user gets a visual hint that more thumbnails
+            exist below. */}
+        <div
+          className="ai-proposals-scroll"
+          style={{
+            maxHeight: "calc(80vh - 100px)",
+            overflowY: "auto",
+            overflowX: "hidden",
+            paddingRight: 4,
+            maskImage:
+              "linear-gradient(to bottom, transparent 0px, black 16px, black calc(100% - 16px), transparent 100%)",
+            WebkitMaskImage:
+              "linear-gradient(to bottom, transparent 0px, black 16px, black calc(100% - 16px), transparent 100%)",
+          }}
+        >
+          <div
             style={{
-              background: CREAM,
-              border: item.isDraft
-                ? `1px dashed ${CORAL}`
-                : `1px solid ${FAINT_BORDER}`,
-              borderRadius: 12,
-              padding: 6,
-              boxShadow: "0 4px 14px rgba(11, 29, 58, 0.10)",
-              textAlign: "left",
-              fontFamily: "inherit",
-              color: NAVY,
-              opacity: item.isDraft ? 0.96 : 1,
-              position: "relative",
-              outline: "none",
-            }}
-            whileHover={{
-              scale: 1.03,
-              boxShadow: "0 8px 22px rgba(11, 29, 58, 0.18)",
-              transition: { duration: 0.18 },
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              paddingTop: 8,
+              paddingBottom: 8,
             }}
           >
-            <div
-              style={{
-                width: "100%",
-                aspectRatio: "16 / 9",
-                borderRadius: 8,
-                overflow: "hidden",
-                background: "#000",
-                position: "relative",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={item.imageUrl}
-                alt={item.prompt}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
+            {items.map((item, i) => (
+              // motion.div (not button) so we can nest the delete <button>
+              // for drafts without invalid HTML. Keyboard support via
+              // role + tabIndex + onKeyDown.
+              <motion.div
+                key={item.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setExpanded(item)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setExpanded(item);
+                  }
                 }}
-              />
-              {item.isDraft && (
-                <span
+                className="cursor-pointer"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{
+                  duration: 0.3,
+                  delay: i * 0.04,
+                  ease: "easeOut",
+                }}
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  flexShrink: 0,
+                  background: "#FFFFFF",
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  boxShadow: "0 4px 12px rgba(11, 29, 58, 0.08)",
+                  outline: "none",
+                  color: NAVY,
+                }}
+                whileHover={{
+                  scale: 1.02,
+                  boxShadow: "0 6px 18px rgba(11, 29, 58, 0.15)",
+                  transition: { duration: 0.18 },
+                }}
+              >
+                <div
                   style={{
-                    position: "absolute",
-                    top: 6,
-                    left: 6,
-                    background: CORAL,
-                    color: "#FFFFFF",
-                    fontSize: 9,
-                    fontWeight: 600,
-                    letterSpacing: "0.5px",
-                    textTransform: "uppercase",
-                    padding: "2px 6px",
-                    borderRadius: 4,
+                    width: "100%",
+                    aspectRatio: "16 / 10",
+                    background: CREAM,
+                    overflow: "hidden",
+                    position: "relative",
                   }}
                 >
-                  Draft
-                </span>
-              )}
-              {item.isDraft && (
-                <button
-                  type="button"
-                  aria-label="Delete draft"
-                  title="Delete draft"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteDraft(item.id);
-                  }}
-                  style={{
-                    position: "absolute",
-                    top: 6,
-                    right: 6,
-                    width: 22,
-                    height: 22,
-                    borderRadius: "50%",
-                    background: "rgba(11, 29, 58, 0.7)",
-                    border: "1.5px solid white",
-                    color: "white",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    padding: 0,
-                    transition:
-                      "background 0.15s ease, border-color 0.15s ease, transform 0.15s ease",
-                    zIndex: 2,
-                    lineHeight: 1,
-                  }}
-                  onMouseEnter={(e) => {
-                    const t = e.currentTarget;
-                    t.style.background = "#E63946";
-                    t.style.borderColor = "#E63946";
-                    t.style.transform = "scale(1.1)";
-                  }}
-                  onMouseLeave={(e) => {
-                    const t = e.currentTarget;
-                    t.style.background = "rgba(11, 29, 58, 0.7)";
-                    t.style.borderColor = "white";
-                    t.style.transform = "scale(1)";
-                  }}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-            <div
-              style={{
-                marginTop: 6,
-                padding: "0 4px 2px",
-                fontSize: 11,
-                lineHeight: 1.4,
-                color: NAVY,
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
-              }}
-            >
-              {item.prompt}
-            </div>
-          </motion.div>
-        ))}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.imageUrl}
+                    alt={item.prompt}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                  />
+                  {item.isDraft && (
+                    <button
+                      type="button"
+                      aria-label="Delete draft"
+                      title="Delete draft"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteDraft(item.id);
+                      }}
+                      style={{
+                        position: "absolute",
+                        top: 6,
+                        right: 6,
+                        width: 22,
+                        height: 22,
+                        borderRadius: "50%",
+                        background: "rgba(11, 29, 58, 0.7)",
+                        border: "1.5px solid white",
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        padding: 0,
+                        transition:
+                          "background 0.15s ease, border-color 0.15s ease, transform 0.15s ease",
+                        zIndex: 2,
+                        lineHeight: 1,
+                      }}
+                      onMouseEnter={(e) => {
+                        const t = e.currentTarget;
+                        t.style.background = "#E63946";
+                        t.style.borderColor = "#E63946";
+                        t.style.transform = "scale(1.1)";
+                      }}
+                      onMouseLeave={(e) => {
+                        const t = e.currentTarget;
+                        t.style.background = "rgba(11, 29, 58, 0.7)";
+                        t.style.borderColor = "white";
+                        t.style.transform = "scale(1)";
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ padding: "10px 12px" }}>
+                  {item.isDraft && (
+                    <div
+                      style={{
+                        display: "inline-block",
+                        padding: "2px 8px",
+                        background: "rgba(244, 117, 96, 0.15)",
+                        color: CORAL,
+                        borderRadius: 999,
+                        fontSize: 9,
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                        marginBottom: 4,
+                      }}
+                    >
+                      Draft
+                    </div>
+                  )}
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 11,
+                      color: NAVY,
+                      lineHeight: 1.4,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {item.prompt}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
       </div>
+
+      {/* Native scrollbar hidden across browsers + smooth scrolling.
+          Mask gradient (set inline above) provides the visual cue
+          that there's more content above/below. */}
+      <style jsx>{`
+        :global(.ai-proposals-scroll) {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+          scroll-behavior: smooth;
+        }
+        :global(.ai-proposals-scroll::-webkit-scrollbar) {
+          width: 0;
+          height: 0;
+          background: transparent;
+          display: none;
+        }
+      `}</style>
 
       <AnimatePresence>
         {expanded && (
