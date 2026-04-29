@@ -4,6 +4,8 @@
 // modal — at which point they're inserted in one batch tied to a
 // `submissions` row and cleared from session.
 
+import type { SketchStroke } from "./database-types";
+
 export interface DraftAnnotation {
   /** Local-only id; the Supabase row will get its own UUID on insert. */
   tempId: string;
@@ -30,11 +32,21 @@ export interface DraftConcern {
   createdAt: string;
 }
 
+// Each location holds at most ONE draft sketch. New strokes are appended
+// to its `strokes` array rather than spawning new draft records — that
+// matches how a real sketching app works (one canvas, many strokes).
+export interface DraftSketch {
+  tempId: string;
+  strokes: SketchStroke[];
+  createdAt: string;
+}
+
 const annotationsKey = (locationId: string) => `ibx-drafts-${locationId}`;
 const responsesKey = (locationId: string) =>
   `ibx-response-drafts-${locationId}`;
 const concernsKey = (locationId: string) =>
   `ibx-concerns-drafts-${locationId}`;
+const sketchKey = (locationId: string) => `ibx-sketch-drafts-${locationId}`;
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -104,6 +116,39 @@ export function saveDraftConcerns(
   writeJSON(concernsKey(locationId), drafts);
 }
 
+// ── Draft sketch (one per location) ─────────────────────────────────────────
+
+export function loadDraftSketch(locationId: string): DraftSketch | null {
+  if (!isBrowser()) return null;
+  try {
+    const raw = window.sessionStorage.getItem(sketchKey(locationId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DraftSketch;
+    return parsed && Array.isArray(parsed.strokes) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveDraftSketch(
+  locationId: string,
+  sketch: DraftSketch | null,
+): void {
+  if (!isBrowser()) return;
+  try {
+    if (sketch === null) {
+      window.sessionStorage.removeItem(sketchKey(locationId));
+    } else {
+      window.sessionStorage.setItem(
+        sketchKey(locationId),
+        JSON.stringify(sketch),
+      );
+    }
+  } catch {
+    /* quota exceeded or storage disabled — silently drop */
+  }
+}
+
 // ── Bulk clear (called after a successful submission) ──────────────────────
 
 export function clearAllDrafts(locationId: string): void {
@@ -112,6 +157,7 @@ export function clearAllDrafts(locationId: string): void {
     window.sessionStorage.removeItem(annotationsKey(locationId));
     window.sessionStorage.removeItem(responsesKey(locationId));
     window.sessionStorage.removeItem(concernsKey(locationId));
+    window.sessionStorage.removeItem(sketchKey(locationId));
   } catch {
     /* ignore */
   }

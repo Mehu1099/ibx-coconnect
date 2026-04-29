@@ -55,3 +55,29 @@ export interface DatabaseUserProfile {
   organization: string | null;
   created_at: string;
 }
+
+// Sketches are stored as vector strokes — no raster image. Each stroke
+// is a polyline of (x, y) percentages of the photo container, which
+// keeps them in sync with the same coordinate system used by sticky
+// notes and concern markers.
+export interface SketchPoint {
+  x: number;
+  y: number;
+}
+
+export interface SketchStroke {
+  color: string;
+  width: number;
+  points: SketchPoint[];
+}
+
+export interface DatabaseSketch {
+  id: string;
+  location_id: string;
+  strokes: SketchStroke[];
+  preview_image_url: string | null;
+  user_id: string | null;
+  anonymous_session_id: string | null;
+  submission_id: string | null;
+  created_at: string;
+}

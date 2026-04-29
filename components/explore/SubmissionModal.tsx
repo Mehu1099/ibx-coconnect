@@ -26,6 +26,9 @@ type Props = {
   draftAnnotationsCount: number;
   draftResponsesCount: number;
   draftConcernsCount: number;
+  /** 0 or 1 — a location's draft sketch is a single contribution
+   *  regardless of how many strokes it contains. */
+  draftSketchCount: number;
   onClose: () => void;
   /** Triggered when the user clicks "Back to neighborhood" from the
    *  celebration. Parent handles fade-out + navigation. */
@@ -38,6 +41,7 @@ export default function SubmissionModal({
   draftAnnotationsCount,
   draftResponsesCount,
   draftConcernsCount,
+  draftSketchCount,
   onClose,
   onNavigateAway,
   onSubmit,
@@ -50,6 +54,7 @@ export default function SubmissionModal({
             draftAnnotationsCount={draftAnnotationsCount}
             draftResponsesCount={draftResponsesCount}
             draftConcernsCount={draftConcernsCount}
+            draftSketchCount={draftSketchCount}
             onSubmit={onSubmit}
             onClose={onClose}
             onNavigateAway={onNavigateAway}
@@ -129,6 +134,7 @@ function ModalBody({
   draftAnnotationsCount,
   draftResponsesCount,
   draftConcernsCount,
+  draftSketchCount,
   onSubmit,
   onClose,
   onNavigateAway,
@@ -136,6 +142,7 @@ function ModalBody({
   draftAnnotationsCount: number;
   draftResponsesCount: number;
   draftConcernsCount: number;
+  draftSketchCount: number;
   onSubmit: (data: SubmissionData) => Promise<SubmitResult>;
   onClose: () => void;
   onNavigateAway: () => void;
@@ -151,14 +158,19 @@ function ModalBody({
   const [submittedSticky, setSubmittedSticky] = useState(0);
   const [submittedResponses, setSubmittedResponses] = useState(0);
   const [submittedConcerns, setSubmittedConcerns] = useState(0);
+  const [submittedSketch, setSubmittedSketch] = useState(0);
   const totalDraftCount =
-    draftAnnotationsCount + draftResponsesCount + draftConcernsCount;
+    draftAnnotationsCount +
+    draftResponsesCount +
+    draftConcernsCount +
+    draftSketchCount;
 
   const handleSubmit = async () => {
     if (!role || !ageRange) return;
     setSubmittedSticky(draftAnnotationsCount);
     setSubmittedResponses(draftResponsesCount);
     setSubmittedConcerns(draftConcernsCount);
+    setSubmittedSketch(draftSketchCount);
     setStage("submitting");
     setErrorMessage(null);
     const result = await onSubmit({
@@ -185,6 +197,7 @@ function ModalBody({
     setSubmittedSticky(draftAnnotationsCount);
     setSubmittedResponses(draftResponsesCount);
     setSubmittedConcerns(draftConcernsCount);
+    setSubmittedSketch(draftSketchCount);
     setStage("submitting");
     setErrorMessage(null);
     const stakeholderRole: SubmissionRole = "planner_stakeholder";
@@ -223,6 +236,7 @@ function ModalBody({
             stickyCount={submittedSticky}
             responseCount={submittedResponses}
             concernCount={submittedConcerns}
+            sketchCount={submittedSketch}
             role={role}
             ageRange={ageRange}
             onClose={onClose}
@@ -613,6 +627,7 @@ function SuccessView({
   stickyCount,
   responseCount,
   concernCount,
+  sketchCount,
   role,
   ageRange,
   onClose,
@@ -621,12 +636,13 @@ function SuccessView({
   stickyCount: number;
   responseCount: number;
   concernCount: number;
+  sketchCount: number;
   role: SubmissionRole | null;
   ageRange: SubmissionAgeRange | null;
   onClose: () => void;
   onNavigateAway: () => void;
 }) {
-  const total = stickyCount + responseCount + concernCount;
+  const total = stickyCount + responseCount + concernCount + sketchCount;
   const roleLabel = role ? roleDisplay(role) : "—";
   const ageLabel = ageRange ? ageDisplay(ageRange) : "—";
 
@@ -747,6 +763,11 @@ function SuccessView({
                 big={String(concernCount)}
                 label={concernCount === 1 ? "CONCERN" : "CONCERNS"}
               />,
+            );
+          }
+          if (sketchCount > 0) {
+            cells.push(
+              <Stat key="sketch" big={String(sketchCount)} label="SKETCH" />,
             );
           }
           cells.push(

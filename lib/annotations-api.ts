@@ -2,11 +2,13 @@ import type {
   DatabaseAnnotation,
   DatabaseConcern,
   DatabaseQuestionResponse,
+  DatabaseSketch,
 } from "./database-types";
 import type {
   DraftAnnotation,
   DraftConcern,
   DraftQuestionResponse,
+  DraftSketch,
 } from "./draft-state";
 import { getAnonymousSessionId, supabase } from "./supabase-client";
 
@@ -201,6 +203,40 @@ export async function createQuestionResponse(
   return data as DatabaseQuestionResponse;
 }
 
+// ── Sketches ────────────────────────────────────────────────────────────────
+
+export async function loadSketches(
+  locationId: string,
+  // Same private-by-default contract as loadAnnotations / loadQuestionResponses.
+  // The future Engage page will pass false for the public collective view.
+  filterByCurrentUser: boolean = true,
+  authenticatedUserId: string | null = null,
+): Promise<DatabaseSketch[]> {
+  let query = supabase
+    .from("sketches")
+    .select("*")
+    .eq("location_id", locationId)
+    .order("created_at", { ascending: true });
+
+  if (filterByCurrentUser) {
+    if (authenticatedUserId) {
+      query = query.eq("user_id", authenticatedUserId);
+    } else {
+      query = query
+        .eq("anonymous_session_id", getAnonymousSessionId())
+        .is("user_id", null);
+    }
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("Error loading sketches:", error);
+    return [];
+  }
+  return (data ?? []) as DatabaseSketch[];
+}
+
 // ── Concerns ────────────────────────────────────────────────────────────────
 
 export async function loadConcerns(
@@ -229,6 +265,7 @@ export async function submitContributions(
   draftAnnotations: DraftAnnotation[],
   draftResponses: DraftQuestionResponse[],
   draftConcerns: DraftConcern[],
+  draftSketch: DraftSketch | null,
   submissionData: SubmissionData,
   // Authenticated stakeholders pass their Supabase user.id; rows are
   // tagged with user_id and anonymous_session_id is left null. Anonymous
@@ -240,8 +277,13 @@ export async function submitContributions(
   | { success: false; error: unknown }
 > {
   const sessionId = userId ? null : getAnonymousSessionId();
+  const sketchCount =
+    draftSketch && draftSketch.strokes.length > 0 ? 1 : 0;
   const totalCount =
-    draftAnnotations.length + draftResponses.length + draftConcerns.length;
+    draftAnnotations.length +
+    draftResponses.length +
+    draftConcerns.length +
+    sketchCount;
   // Stakeholder when authenticated OR when the anonymous form's role
   // self-identifies as one — keep the existing flag honored.
   const isStakeholder = !!userId || (submissionData.isStakeholder ?? false);
@@ -336,6 +378,23 @@ export async function submitContributions(
     if (concernsError) {
       console.error("Concerns insert failed:", concernsError);
       return { success: false, error: concernsError };
+    }
+  }
+
+  // 5. Insert the sketch (one row per submission, holding the full
+  // strokes array as JSONB). Skipped if the user's draft is empty.
+  if (draftSketch && draftSketch.strokes.length > 0) {
+    const { error: sketchError } = await supabase.from("sketches").insert({
+      location_id: locationId,
+      strokes: draftSketch.strokes,
+      anonymous_session_id: sessionId,
+      user_id: userId,
+      submission_id: submissionId,
+    });
+
+    if (sketchError) {
+      console.error("Sketch insert failed:", sketchError);
+      return { success: false, error: sketchError };
     }
   }
 

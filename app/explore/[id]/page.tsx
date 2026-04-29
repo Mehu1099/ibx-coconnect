@@ -14,6 +14,8 @@ import LocationToolbar, {
 } from "@/components/explore/LocationToolbar";
 import LocationTopNav from "@/components/explore/LocationTopNav";
 import PersonalCanvasHint from "@/components/explore/PersonalCanvasHint";
+import SketchCanvas from "@/components/explore/SketchCanvas";
+import SketchToolbar from "@/components/explore/SketchToolbar";
 import {
   StickyNoteComposer,
   StickyNoteDot,
@@ -27,6 +29,7 @@ import {
   echoConcern,
   loadAnnotations,
   loadQuestionResponses,
+  loadSketches,
   submitContributions,
   type SubmissionData,
 } from "@/lib/annotations-api";
@@ -35,19 +38,24 @@ import type { ConcernCategory } from "@/lib/concern-categories";
 import type {
   DatabaseAnnotation,
   DatabaseQuestionResponse,
+  DatabaseSketch,
+  SketchStroke,
 } from "@/lib/database-types";
 import {
   clearAllDrafts,
   loadDraftAnnotations,
   loadDraftConcerns,
   loadDraftResponses,
+  loadDraftSketch,
   makeDraftId,
   saveDraftAnnotations,
   saveDraftConcerns,
   saveDraftResponses,
+  saveDraftSketch,
   type DraftAnnotation,
   type DraftConcern,
   type DraftQuestionResponse,
+  type DraftSketch,
 } from "@/lib/draft-state";
 import { EXPLORE_LOCATIONS } from "@/lib/explore-locations";
 import { PLANNER_QUESTIONS } from "@/lib/planner-questions";
@@ -59,10 +67,12 @@ const CREAM = "#EDE5D5";
 
 const TUTORIAL_STORAGE_KEY = "ibx-tutorial-completed";
 
-const PLACEHOLDER_TOOL_LABELS: Record<"sketch" | "ai", string> = {
-  sketch: "Sketch",
+const PLACEHOLDER_TOOL_LABELS: Record<"ai", string> = {
   ai: "AI Generate",
 };
+
+const DEFAULT_SKETCH_COLOR = "#F47560";
+const DEFAULT_SKETCH_WIDTH = 6;
 
 // SVG-cursor data URIs so each tool feels distinct on the photo. Hot-spot
 // coords (the trailing two numbers) are tuned to the icon center.
@@ -114,6 +124,11 @@ export default function LocationPage() {
   const [draftAnnotations, setDraftAnnotations] = useState<DraftAnnotation[]>([]);
   const [draftResponses, setDraftResponses] = useState<DraftQuestionResponse[]>([]);
   const [draftConcerns, setDraftConcerns] = useState<DraftConcern[]>([]);
+  const [submittedSketches, setSubmittedSketches] = useState<DatabaseSketch[]>([]);
+  const [draftSketch, setDraftSketch] = useState<DraftSketch | null>(null);
+  const [sketchColor, setSketchColor] = useState(DEFAULT_SKETCH_COLOR);
+  const [sketchWidth, setSketchWidth] = useState(DEFAULT_SKETCH_WIDTH);
+  const [isErasing, setIsErasing] = useState(false);
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [pendingNote, setPendingNote] = useState<{ x: number; y: number } | null>(null);
   const [pendingConcern, setPendingConcern] = useState<{ x: number; y: number } | null>(null);
@@ -144,26 +159,35 @@ export default function LocationPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- canonical clear-before-refetch when auth identity changes; otherwise stakeholder rows linger during the new anonymous fetch
     setSubmittedAnnotations([]);
     setSubmittedResponses([]);
+    setSubmittedSketches([]);
     Promise.all([
       loadAnnotations(id, true, userId),
       loadQuestionResponses(id, true, userId),
-    ]).then(([annotationsData, responsesData]) => {
+      loadSketches(id, true, userId),
+    ]).then(([annotationsData, responsesData, sketchesData]) => {
       if (cancelled) return;
       setSubmittedAnnotations(
         annotationsData.filter((a) => a.type === "sticky"),
       );
       setSubmittedResponses(responsesData);
+      setSubmittedSketches(sketchesData);
     });
     setDraftAnnotations(loadDraftAnnotations(id));
     setDraftResponses(loadDraftResponses(id));
     setDraftConcerns(loadDraftConcerns(id));
+    setDraftSketch(loadDraftSketch(id));
     return () => {
       cancelled = true;
     };
   }, [id, userId, authLoading]);
 
+  const sketchDraftCount =
+    draftSketch && draftSketch.strokes.length > 0 ? 1 : 0;
   const draftCount =
-    draftAnnotations.length + draftResponses.length + draftConcerns.length;
+    draftAnnotations.length +
+    draftResponses.length +
+    draftConcerns.length +
+    sketchDraftCount;
   // "Weight" = creator (1) + echoers (echo_count). Drafts contribute 1
   // each; their authors haven't pushed them to Supabase yet so there
   // are no echoes to count. The Explore badge, the banner here, and
@@ -195,14 +219,11 @@ export default function LocationPage() {
   // and don't touch the active tool.
   useEffect(() => {
     if (!toast) return;
-    const isPlaceholder =
-      toast.startsWith("Sketch ") || toast.startsWith("AI Generate ");
+    const isPlaceholder = toast.startsWith("AI Generate ");
     const t = window.setTimeout(() => {
       setToast(null);
       if (isPlaceholder) {
-        setActiveTool((current) =>
-          current === "sketch" || current === "ai" ? null : current,
-        );
+        setActiveTool((current) => (current === "ai" ? null : current));
       }
     }, isPlaceholder ? 3000 : 1600);
     return () => window.clearTimeout(t);
@@ -251,8 +272,13 @@ export default function LocationPage() {
     setPendingNote(null);
     setSelectedNoteId(null);
     setPendingConcern(null);
+    // Leaving the sketch tool drops eraser mode so the next entry starts
+    // in the default draw state.
+    if (tool !== "sketch") {
+      setIsErasing(false);
+    }
 
-    if (tool === "sketch" || tool === "ai") {
+    if (tool === "ai") {
       setToast(
         `${PLACEHOLDER_TOOL_LABELS[tool]} — coming in next update, building this in Session 4!`,
       );
@@ -372,6 +398,81 @@ export default function LocationPage() {
     await echoConcern(concernId);
   }, []);
 
+  // ── Draft sketch (local + sessionStorage) ───────────────────────────────
+  // One sketch per location; new strokes append to the same draft. Empty
+  // drafts (after undo / erase / clear) collapse back to null so the
+  // submission flow doesn't try to insert a sketch row with no strokes.
+
+  const handleStrokeComplete = useCallback(
+    (stroke: SketchStroke) => {
+      if (!id) return;
+      setDraftSketch((prev) => {
+        const next: DraftSketch = prev
+          ? { ...prev, strokes: [...prev.strokes, stroke] }
+          : {
+              tempId: makeDraftId(),
+              strokes: [stroke],
+              createdAt: new Date().toISOString(),
+            };
+        saveDraftSketch(id, next);
+        return next;
+      });
+    },
+    [id],
+  );
+
+  // The scrub eraser passes the full post-split stroke list — it can
+  // split one stroke into many, drop strokes entirely, or just shorten
+  // them, so a stroke-index-based callback isn't enough.
+  const handleDraftStrokesChange = useCallback(
+    (strokes: SketchStroke[]) => {
+      if (!id) return;
+      setDraftSketch((prev) => {
+        if (strokes.length === 0) {
+          saveDraftSketch(id, null);
+          return null;
+        }
+        const next: DraftSketch = prev
+          ? { ...prev, strokes }
+          : {
+              tempId: makeDraftId(),
+              strokes,
+              createdAt: new Date().toISOString(),
+            };
+        saveDraftSketch(id, next);
+        return next;
+      });
+    },
+    [id],
+  );
+
+  const handleUndoSketch = useCallback(() => {
+    if (!id) return;
+    setDraftSketch((prev) => {
+      if (!prev || prev.strokes.length === 0) return prev;
+      const remaining = prev.strokes.slice(0, -1);
+      if (remaining.length === 0) {
+        saveDraftSketch(id, null);
+        return null;
+      }
+      const next: DraftSketch = { ...prev, strokes: remaining };
+      saveDraftSketch(id, next);
+      return next;
+    });
+  }, [id]);
+
+  const handleClearAllSketch = useCallback(() => {
+    if (!id) return;
+    setDraftSketch(null);
+    saveDraftSketch(id, null);
+    setIsErasing(false);
+  }, [id]);
+
+  const handleSketchColorChange = useCallback((color: string) => {
+    setSketchColor(color);
+    setIsErasing(false);
+  }, []);
+
   // ── Draft question responses (local + sessionStorage) ────────────────────
 
   const handleAddDraftResponse = useCallback(
@@ -396,6 +497,7 @@ export default function LocationPage() {
         draftAnnotations,
         draftResponses,
         draftConcerns,
+        draftSketch,
         data,
         userId,
       );
@@ -406,21 +508,25 @@ export default function LocationPage() {
       // appear in their final styling, then clear the drafts from
       // both state and sessionStorage. Concerns aren't refetched here —
       // the realtime hook will pick up the INSERTs and prepend them.
-      const [annotationsData, responsesData] = await Promise.all([
+      const [annotationsData, responsesData, sketchesData] = await Promise.all([
         loadAnnotations(id, true, userId),
         loadQuestionResponses(id, true, userId),
+        loadSketches(id, true, userId),
       ]);
       setSubmittedAnnotations(
         annotationsData.filter((a) => a.type === "sticky"),
       );
       setSubmittedResponses(responsesData);
+      setSubmittedSketches(sketchesData);
       setDraftAnnotations([]);
       setDraftResponses([]);
       setDraftConcerns([]);
+      setDraftSketch(null);
+      setIsErasing(false);
       clearAllDrafts(id);
       return { success: true as const };
     },
-    [id, draftAnnotations, draftResponses, draftConcerns, userId],
+    [id, draftAnnotations, draftResponses, draftConcerns, draftSketch, userId],
   );
 
   // ── Back navigation with fade-out ─────────────────────────────────────────
@@ -581,6 +687,20 @@ export default function LocationPage() {
               isMyConcern
             />
           ))}
+
+          {/* Sketch overlay — fills the photo area, renders all
+              submitted strokes plus the user's draft strokes, and
+              becomes interactive only when the sketch tool is active. */}
+          <SketchCanvas
+            isActive={activeTool === "sketch" && showAnnotations}
+            isErasing={isErasing}
+            currentColor={sketchColor}
+            currentWidth={sketchWidth}
+            existingStrokes={submittedSketches.flatMap((s) => s.strokes)}
+            draftStrokes={draftSketch?.strokes ?? []}
+            onStrokeComplete={handleStrokeComplete}
+            onDraftStrokesChange={handleDraftStrokesChange}
+          />
         </motion.div>
 
         {pendingNote && (
@@ -627,6 +747,20 @@ export default function LocationPage() {
         onToggleVisibility={handleToggleVisibility}
         tutorialHighlight={tutorialStep === 2}
       />
+
+      {/* ── Sketch tool's secondary toolbar (color/width/eraser/undo/clear) */}
+      <SketchToolbar
+        isVisible={activeTool === "sketch"}
+        currentColor={sketchColor}
+        currentWidth={sketchWidth}
+        isErasing={isErasing}
+        hasStrokes={(draftSketch?.strokes.length ?? 0) > 0}
+        onColorChange={handleSketchColorChange}
+        onWidthChange={setSketchWidth}
+        onToggleErase={() => setIsErasing((prev) => !prev)}
+        onUndo={handleUndoSketch}
+        onClearAll={handleClearAllSketch}
+      />
       <ActivityCounters
         concerns={totalConcernWeight}
         questions={submittedResponses.length + draftResponses.length}
@@ -644,11 +778,14 @@ export default function LocationPage() {
           draftCount > 0, so they never overlap on screen. */}
       <PersonalCanvasHint
         show={
+          activeTool !== "sketch" &&
           submittedAnnotations.length === 0 &&
           submittedResponses.length === 0 &&
+          submittedSketches.length === 0 &&
           draftAnnotations.length === 0 &&
           draftResponses.length === 0 &&
-          draftConcerns.length === 0
+          draftConcerns.length === 0 &&
+          sketchDraftCount === 0
         }
       />
 
@@ -658,6 +795,7 @@ export default function LocationPage() {
         draftAnnotationsCount={draftAnnotations.length}
         draftResponsesCount={draftResponses.length}
         draftConcernsCount={draftConcerns.length}
+        draftSketchCount={sketchDraftCount}
         onClose={() => setSubmissionModalOpen(false)}
         onNavigateAway={() => {
           setSubmissionModalOpen(false);
