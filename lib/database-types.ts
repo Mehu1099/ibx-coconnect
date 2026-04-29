@@ -43,8 +43,13 @@ export interface DatabaseAIProposal {
   location_id: string;
   prompt: string;
   generated_image_url: string | null;
+  storage_path: string | null;
+  replicate_prediction_id: string | null;
+  generation_status: "pending" | "processing" | "succeeded" | "failed";
+  error_message: string | null;
   user_id: string | null;
   anonymous_session_id: string | null;
+  submission_id: string | null;
   created_at: string;
 }
 

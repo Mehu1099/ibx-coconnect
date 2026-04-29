@@ -41,12 +41,29 @@ export interface DraftSketch {
   createdAt: string;
 }
 
+// AI proposal drafts are full-image alternatives keyed by tempId. The
+// generated image already lives in Supabase Storage by the time it
+// becomes a draft (the route handler uploads it as a side-effect of
+// the polling endpoint), so the draft itself just holds the public
+// URL + storage path so the eventual submit can copy them onto the
+// ai_proposals row.
+export interface DraftAIProposal {
+  tempId: string;
+  prompt: string;
+  imageUrl: string;
+  storagePath: string;
+  predictionId: string;
+  createdAt: string;
+}
+
 const annotationsKey = (locationId: string) => `ibx-drafts-${locationId}`;
 const responsesKey = (locationId: string) =>
   `ibx-response-drafts-${locationId}`;
 const concernsKey = (locationId: string) =>
   `ibx-concerns-drafts-${locationId}`;
 const sketchKey = (locationId: string) => `ibx-sketch-drafts-${locationId}`;
+const aiProposalsKey = (locationId: string) =>
+  `ibx-ai-drafts-${locationId}`;
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -149,6 +166,19 @@ export function saveDraftSketch(
   }
 }
 
+// ── Draft AI proposals (local + sessionStorage) ─────────────────────────────
+
+export function loadDraftAIProposals(locationId: string): DraftAIProposal[] {
+  return readJSON<DraftAIProposal>(aiProposalsKey(locationId));
+}
+
+export function saveDraftAIProposals(
+  locationId: string,
+  drafts: DraftAIProposal[],
+): void {
+  writeJSON(aiProposalsKey(locationId), drafts);
+}
+
 // ── Bulk clear (called after a successful submission) ──────────────────────
 
 export function clearAllDrafts(locationId: string): void {
@@ -158,6 +188,7 @@ export function clearAllDrafts(locationId: string): void {
     window.sessionStorage.removeItem(responsesKey(locationId));
     window.sessionStorage.removeItem(concernsKey(locationId));
     window.sessionStorage.removeItem(sketchKey(locationId));
+    window.sessionStorage.removeItem(aiProposalsKey(locationId));
   } catch {
     /* ignore */
   }

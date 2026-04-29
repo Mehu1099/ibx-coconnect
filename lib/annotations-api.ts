@@ -1,10 +1,12 @@
 import type {
+  DatabaseAIProposal,
   DatabaseAnnotation,
   DatabaseConcern,
   DatabaseQuestionResponse,
   DatabaseSketch,
 } from "./database-types";
 import type {
+  DraftAIProposal,
   DraftAnnotation,
   DraftConcern,
   DraftQuestionResponse,
@@ -237,6 +239,44 @@ export async function loadSketches(
   return (data ?? []) as DatabaseSketch[];
 }
 
+// ── AI proposals ────────────────────────────────────────────────────────────
+
+export async function loadAIProposals(
+  locationId: string,
+  // Same private-by-default contract as the other loaders. AI proposals
+  // are full-image alternatives; until we surface them on the public
+  // Engage page they're scoped to the author's own canvas.
+  filterByCurrentUser: boolean = true,
+  authenticatedUserId: string | null = null,
+): Promise<DatabaseAIProposal[]> {
+  let query = supabase
+    .from("ai_proposals")
+    .select("*")
+    .eq("location_id", locationId)
+    // Only surface successful generations. Failed/pending rows would
+    // never have a usable image_url anyway.
+    .eq("generation_status", "succeeded")
+    .order("created_at", { ascending: false });
+
+  if (filterByCurrentUser) {
+    if (authenticatedUserId) {
+      query = query.eq("user_id", authenticatedUserId);
+    } else {
+      query = query
+        .eq("anonymous_session_id", getAnonymousSessionId())
+        .is("user_id", null);
+    }
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("Error loading AI proposals:", error);
+    return [];
+  }
+  return (data ?? []) as DatabaseAIProposal[];
+}
+
 // ── Concerns ────────────────────────────────────────────────────────────────
 
 export async function loadConcerns(
@@ -266,6 +306,7 @@ export async function submitContributions(
   draftResponses: DraftQuestionResponse[],
   draftConcerns: DraftConcern[],
   draftSketch: DraftSketch | null,
+  draftAIProposals: DraftAIProposal[],
   submissionData: SubmissionData,
   // Authenticated stakeholders pass their Supabase user.id; rows are
   // tagged with user_id and anonymous_session_id is left null. Anonymous
@@ -283,7 +324,8 @@ export async function submitContributions(
     draftAnnotations.length +
     draftResponses.length +
     draftConcerns.length +
-    sketchCount;
+    sketchCount +
+    draftAIProposals.length;
   // Stakeholder when authenticated OR when the anonymous form's role
   // self-identifies as one — keep the existing flag honored.
   const isStakeholder = !!userId || (submissionData.isStakeholder ?? false);
@@ -395,6 +437,33 @@ export async function submitContributions(
     if (sketchError) {
       console.error("Sketch insert failed:", sketchError);
       return { success: false, error: sketchError };
+    }
+  }
+
+  // 6. Fan out AI proposal drafts. The image already lives in Supabase
+  // Storage by this point (the polling endpoint uploads it the moment
+  // the prediction succeeds); we're only writing the row that links
+  // the public URL to this submission.
+  if (draftAIProposals.length > 0) {
+    const proposalsToInsert = draftAIProposals.map((d) => ({
+      location_id: locationId,
+      prompt: d.prompt,
+      generated_image_url: d.imageUrl,
+      storage_path: d.storagePath,
+      replicate_prediction_id: d.predictionId,
+      generation_status: "succeeded" as const,
+      anonymous_session_id: sessionId,
+      user_id: userId,
+      submission_id: submissionId,
+    }));
+
+    const { error: aiError } = await supabase
+      .from("ai_proposals")
+      .insert(proposalsToInsert);
+
+    if (aiError) {
+      console.error("AI proposals insert failed:", aiError);
+      return { success: false, error: aiError };
     }
   }
 

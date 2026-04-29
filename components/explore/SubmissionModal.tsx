@@ -29,6 +29,7 @@ type Props = {
   /** 0 or 1 — a location's draft sketch is a single contribution
    *  regardless of how many strokes it contains. */
   draftSketchCount: number;
+  draftAIProposalsCount: number;
   onClose: () => void;
   /** Triggered when the user clicks "Back to neighborhood" from the
    *  celebration. Parent handles fade-out + navigation. */
@@ -42,6 +43,7 @@ export default function SubmissionModal({
   draftResponsesCount,
   draftConcernsCount,
   draftSketchCount,
+  draftAIProposalsCount,
   onClose,
   onNavigateAway,
   onSubmit,
@@ -55,6 +57,7 @@ export default function SubmissionModal({
             draftResponsesCount={draftResponsesCount}
             draftConcernsCount={draftConcernsCount}
             draftSketchCount={draftSketchCount}
+            draftAIProposalsCount={draftAIProposalsCount}
             onSubmit={onSubmit}
             onClose={onClose}
             onNavigateAway={onNavigateAway}
@@ -135,6 +138,7 @@ function ModalBody({
   draftResponsesCount,
   draftConcernsCount,
   draftSketchCount,
+  draftAIProposalsCount,
   onSubmit,
   onClose,
   onNavigateAway,
@@ -143,6 +147,7 @@ function ModalBody({
   draftResponsesCount: number;
   draftConcernsCount: number;
   draftSketchCount: number;
+  draftAIProposalsCount: number;
   onSubmit: (data: SubmissionData) => Promise<SubmitResult>;
   onClose: () => void;
   onNavigateAway: () => void;
@@ -159,11 +164,13 @@ function ModalBody({
   const [submittedResponses, setSubmittedResponses] = useState(0);
   const [submittedConcerns, setSubmittedConcerns] = useState(0);
   const [submittedSketch, setSubmittedSketch] = useState(0);
+  const [submittedAIProposals, setSubmittedAIProposals] = useState(0);
   const totalDraftCount =
     draftAnnotationsCount +
     draftResponsesCount +
     draftConcernsCount +
-    draftSketchCount;
+    draftSketchCount +
+    draftAIProposalsCount;
 
   const handleSubmit = async () => {
     if (!role || !ageRange) return;
@@ -171,6 +178,7 @@ function ModalBody({
     setSubmittedResponses(draftResponsesCount);
     setSubmittedConcerns(draftConcernsCount);
     setSubmittedSketch(draftSketchCount);
+    setSubmittedAIProposals(draftAIProposalsCount);
     setStage("submitting");
     setErrorMessage(null);
     const result = await onSubmit({
@@ -198,6 +206,7 @@ function ModalBody({
     setSubmittedResponses(draftResponsesCount);
     setSubmittedConcerns(draftConcernsCount);
     setSubmittedSketch(draftSketchCount);
+    setSubmittedAIProposals(draftAIProposalsCount);
     setStage("submitting");
     setErrorMessage(null);
     const stakeholderRole: SubmissionRole = "planner_stakeholder";
@@ -237,6 +246,7 @@ function ModalBody({
             responseCount={submittedResponses}
             concernCount={submittedConcerns}
             sketchCount={submittedSketch}
+            aiProposalCount={submittedAIProposals}
             role={role}
             ageRange={ageRange}
             onClose={onClose}
@@ -628,6 +638,7 @@ function SuccessView({
   responseCount,
   concernCount,
   sketchCount,
+  aiProposalCount,
   role,
   ageRange,
   onClose,
@@ -637,12 +648,14 @@ function SuccessView({
   responseCount: number;
   concernCount: number;
   sketchCount: number;
+  aiProposalCount: number;
   role: SubmissionRole | null;
   ageRange: SubmissionAgeRange | null;
   onClose: () => void;
   onNavigateAway: () => void;
 }) {
-  const total = stickyCount + responseCount + concernCount + sketchCount;
+  const total =
+    stickyCount + responseCount + concernCount + sketchCount + aiProposalCount;
   const roleLabel = role ? roleDisplay(role) : "—";
   const ageLabel = ageRange ? ageDisplay(ageRange) : "—";
 
@@ -768,6 +781,17 @@ function SuccessView({
           if (sketchCount > 0) {
             cells.push(
               <Stat key="sketch" big={String(sketchCount)} label="SKETCH" />,
+            );
+          }
+          if (aiProposalCount > 0) {
+            cells.push(
+              <Stat
+                key="ai"
+                big={String(aiProposalCount)}
+                label={
+                  aiProposalCount === 1 ? "AI PROPOSAL" : "AI PROPOSALS"
+                }
+              />,
             );
           }
           cells.push(

@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ActivityCounters from "@/components/explore/ActivityCounters";
+import AIGenerationModal from "@/components/explore/AIGenerationModal";
+import AIProposalsPanel from "@/components/explore/AIProposalsPanel";
 import CinematicPhoto from "@/components/explore/CinematicPhoto";
 import ConcernCreationModal from "@/components/explore/ConcernCreationModal";
 import ConcernMarker from "@/components/explore/ConcernMarker";
@@ -27,6 +29,7 @@ import TutorialOverlay, {
 } from "@/components/explore/TutorialOverlay";
 import {
   echoConcern,
+  loadAIProposals,
   loadAnnotations,
   loadQuestionResponses,
   loadSketches,
@@ -36,6 +39,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import type { ConcernCategory } from "@/lib/concern-categories";
 import type {
+  DatabaseAIProposal,
   DatabaseAnnotation,
   DatabaseQuestionResponse,
   DatabaseSketch,
@@ -43,15 +47,18 @@ import type {
 } from "@/lib/database-types";
 import {
   clearAllDrafts,
+  loadDraftAIProposals,
   loadDraftAnnotations,
   loadDraftConcerns,
   loadDraftResponses,
   loadDraftSketch,
   makeDraftId,
+  saveDraftAIProposals,
   saveDraftAnnotations,
   saveDraftConcerns,
   saveDraftResponses,
   saveDraftSketch,
+  type DraftAIProposal,
   type DraftAnnotation,
   type DraftConcern,
   type DraftQuestionResponse,
@@ -66,10 +73,6 @@ const NAVY = "#0B1D3A";
 const CREAM = "#EDE5D5";
 
 const TUTORIAL_STORAGE_KEY = "ibx-tutorial-completed";
-
-const PLACEHOLDER_TOOL_LABELS: Record<"ai", string> = {
-  ai: "AI Generate",
-};
 
 const DEFAULT_SKETCH_COLOR = "#F47560";
 const DEFAULT_SKETCH_WIDTH = 6;
@@ -137,6 +140,13 @@ export default function LocationPage() {
   const [leaving, setLeaving] = useState(false);
   const [tutorialStep, setTutorialStep] = useState<TutorialStep | null>(null);
   const [submissionModalOpen, setSubmissionModalOpen] = useState(false);
+  const [submittedAIProposals, setSubmittedAIProposals] = useState<
+    DatabaseAIProposal[]
+  >([]);
+  const [draftAIProposals, setDraftAIProposals] = useState<DraftAIProposal[]>(
+    [],
+  );
+  const [aiModalOpen, setAIModalOpen] = useState(false);
 
   // Realtime concerns are PUBLIC — every browser sees the same feed. The
   // hook handles initial load + INSERT/UPDATE subscriptions internally.
@@ -160,22 +170,28 @@ export default function LocationPage() {
     setSubmittedAnnotations([]);
     setSubmittedResponses([]);
     setSubmittedSketches([]);
+    setSubmittedAIProposals([]);
     Promise.all([
       loadAnnotations(id, true, userId),
       loadQuestionResponses(id, true, userId),
       loadSketches(id, true, userId),
-    ]).then(([annotationsData, responsesData, sketchesData]) => {
-      if (cancelled) return;
-      setSubmittedAnnotations(
-        annotationsData.filter((a) => a.type === "sticky"),
-      );
-      setSubmittedResponses(responsesData);
-      setSubmittedSketches(sketchesData);
-    });
+      loadAIProposals(id, true, userId),
+    ]).then(
+      ([annotationsData, responsesData, sketchesData, aiProposalsData]) => {
+        if (cancelled) return;
+        setSubmittedAnnotations(
+          annotationsData.filter((a) => a.type === "sticky"),
+        );
+        setSubmittedResponses(responsesData);
+        setSubmittedSketches(sketchesData);
+        setSubmittedAIProposals(aiProposalsData);
+      },
+    );
     setDraftAnnotations(loadDraftAnnotations(id));
     setDraftResponses(loadDraftResponses(id));
     setDraftConcerns(loadDraftConcerns(id));
     setDraftSketch(loadDraftSketch(id));
+    setDraftAIProposals(loadDraftAIProposals(id));
     return () => {
       cancelled = true;
     };
@@ -187,7 +203,8 @@ export default function LocationPage() {
     draftAnnotations.length +
     draftResponses.length +
     draftConcerns.length +
-    sketchDraftCount;
+    sketchDraftCount +
+    draftAIProposals.length;
   // "Weight" = creator (1) + echoers (echo_count). Drafts contribute 1
   // each; their authors haven't pushed them to Supabase yet so there
   // are no echoes to count. The Explore badge, the banner here, and
@@ -214,18 +231,10 @@ export default function LocationPage() {
     }
   }, []);
 
-  // Toast lifecycle. Placeholder tools auto-dismiss after 3s and also
-  // deselect themselves; visibility-toggle toasts are shorter (1.6s)
-  // and don't touch the active tool.
+  // Toast lifecycle. Visibility-toggle toasts dismiss after 1.6s.
   useEffect(() => {
     if (!toast) return;
-    const isPlaceholder = toast.startsWith("AI Generate ");
-    const t = window.setTimeout(() => {
-      setToast(null);
-      if (isPlaceholder) {
-        setActiveTool((current) => (current === "ai" ? null : current));
-      }
-    }, isPlaceholder ? 3000 : 1600);
+    const t = window.setTimeout(() => setToast(null), 1600);
     return () => window.clearTimeout(t);
   }, [toast]);
 
@@ -268,6 +277,14 @@ export default function LocationPage() {
   // ── Tool handlers ──────────────────────────────────────────────────────────
 
   const handleSelectTool = useCallback((tool: ToolId | null) => {
+    // The AI tool is modal — clicking it opens the generation dialog
+    // and never enters a "drawing on the photo" state, so we don't
+    // touch activeTool. Leaves the previously-selected tool intact
+    // for when the user dismisses the modal.
+    if (tool === "ai") {
+      setAIModalOpen(true);
+      return;
+    }
     setActiveTool(tool);
     setPendingNote(null);
     setSelectedNoteId(null);
@@ -277,15 +294,37 @@ export default function LocationPage() {
     if (tool !== "sketch") {
       setIsErasing(false);
     }
-
-    if (tool === "ai") {
-      setToast(
-        `${PLACEHOLDER_TOOL_LABELS[tool]} — coming in next update, building this in Session 4!`,
-      );
-    } else {
-      setToast(null);
-    }
+    setToast(null);
   }, []);
+
+  // Save a kept AI proposal as a draft. The image already lives in
+  // Supabase Storage by this point — submitContributions later writes
+  // the row that links it.
+  const handleSaveAIProposal = useCallback(
+    (proposal: {
+      prompt: string;
+      imageUrl: string;
+      storagePath: string;
+      predictionId: string;
+    }) => {
+      if (!id) return;
+      const newDraft: DraftAIProposal = {
+        tempId: makeDraftId(),
+        prompt: proposal.prompt,
+        imageUrl: proposal.imageUrl,
+        storagePath: proposal.storagePath,
+        predictionId: proposal.predictionId,
+        createdAt: new Date().toISOString(),
+      };
+      setDraftAIProposals((prev) => {
+        const next = [...prev, newDraft];
+        saveDraftAIProposals(id, next);
+        return next;
+      });
+      setAIModalOpen(false);
+    },
+    [id],
+  );
 
   // ── Photo click → maybe start a new sticky note + tutorial advance ──────
 
@@ -498,6 +537,7 @@ export default function LocationPage() {
         draftResponses,
         draftConcerns,
         draftSketch,
+        draftAIProposals,
         data,
         userId,
       );
@@ -508,25 +548,37 @@ export default function LocationPage() {
       // appear in their final styling, then clear the drafts from
       // both state and sessionStorage. Concerns aren't refetched here —
       // the realtime hook will pick up the INSERTs and prepend them.
-      const [annotationsData, responsesData, sketchesData] = await Promise.all([
-        loadAnnotations(id, true, userId),
-        loadQuestionResponses(id, true, userId),
-        loadSketches(id, true, userId),
-      ]);
+      const [annotationsData, responsesData, sketchesData, aiProposalsData] =
+        await Promise.all([
+          loadAnnotations(id, true, userId),
+          loadQuestionResponses(id, true, userId),
+          loadSketches(id, true, userId),
+          loadAIProposals(id, true, userId),
+        ]);
       setSubmittedAnnotations(
         annotationsData.filter((a) => a.type === "sticky"),
       );
       setSubmittedResponses(responsesData);
       setSubmittedSketches(sketchesData);
+      setSubmittedAIProposals(aiProposalsData);
       setDraftAnnotations([]);
       setDraftResponses([]);
       setDraftConcerns([]);
       setDraftSketch(null);
+      setDraftAIProposals([]);
       setIsErasing(false);
       clearAllDrafts(id);
       return { success: true as const };
     },
-    [id, draftAnnotations, draftResponses, draftConcerns, draftSketch, userId],
+    [
+      id,
+      draftAnnotations,
+      draftResponses,
+      draftConcerns,
+      draftSketch,
+      draftAIProposals,
+      userId,
+    ],
   );
 
   // ── Back navigation with fade-out ─────────────────────────────────────────
@@ -739,6 +791,12 @@ export default function LocationPage() {
         tutorialHighlight={tutorialStep === 3}
       />
 
+      {/* ── AI proposals strip (mirrors the question cards on the left) ─── */}
+      <AIProposalsPanel
+        proposals={submittedAIProposals}
+        draftProposals={draftAIProposals}
+      />
+
       {/* ── Toolbar + counters ──────────────────────────────────────────── */}
       <LocationToolbar
         activeTool={activeTool}
@@ -782,10 +840,12 @@ export default function LocationPage() {
           submittedAnnotations.length === 0 &&
           submittedResponses.length === 0 &&
           submittedSketches.length === 0 &&
+          submittedAIProposals.length === 0 &&
           draftAnnotations.length === 0 &&
           draftResponses.length === 0 &&
           draftConcerns.length === 0 &&
-          sketchDraftCount === 0
+          sketchDraftCount === 0 &&
+          draftAIProposals.length === 0
         }
       />
 
@@ -796,12 +856,29 @@ export default function LocationPage() {
         draftResponsesCount={draftResponses.length}
         draftConcernsCount={draftConcerns.length}
         draftSketchCount={sketchDraftCount}
+        draftAIProposalsCount={draftAIProposals.length}
         onClose={() => setSubmissionModalOpen(false)}
         onNavigateAway={() => {
           setSubmissionModalOpen(false);
           handleBack();
         }}
         onSubmit={handleSubmitContributions}
+      />
+
+      {/* ── AI generation modal ─────────────────────────────────────────── */}
+      <AIGenerationModal
+        isOpen={aiModalOpen}
+        onClose={() => setAIModalOpen(false)}
+        locationId={id}
+        // Replicate fetches the base image over the public web, so we
+        // hand it an absolute URL. /public is served at the site root,
+        // and location.image is already prefixed with /explore/...
+        basePhotoUrl={
+          typeof window !== "undefined"
+            ? `${window.location.origin}${location.image}`
+            : location.image
+        }
+        onSave={handleSaveAIProposal}
       />
 
       {/* ── Tutorial (first-visit only) ─────────────────────────────────── */}
