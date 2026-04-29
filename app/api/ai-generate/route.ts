@@ -139,27 +139,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // FLUX Kontext Max is purpose-built for image editing on Replicate:
-    // it treats input_image as the BASE to edit and only modifies what
-    // the prompt describes. FLUX.2 Pro on Replicate treated input_image
-    // as a loose inspiration reference and produced unrelated scenes.
-    //
-    // CRITICAL: pass ONLY prompt and input_image. Per Replicate's
-    // official Kontext example, extra parameters (aspect_ratio,
-    // output_format, safety_tolerance, guidance_scale, etc.) can cause
-    // a silent fallback to text-to-image mode where the input image is
-    // ignored entirely.
-    console.log("[ai-generate] Sending to Replicate (FLUX Kontext Max):", {
+    // Google Nano Banana 2 (Gemini 3.1 Flash Image) on Replicate.
+    // Image-edit mode wants the source URLs in image_input as an ARRAY
+    // — note the parameter name difference vs. the Nano Banana family's
+    // close cousins (FLUX uses `input_image` singular; fal.ai uses
+    // `image_urls`). aspect_ratio: "match_input_image" is the special
+    // value that auto-matches the source photo's dimensions, which is
+    // exactly what we want for street-edit proposals.
+    console.log("[ai-generate] Sending to Replicate (Nano Banana 2):", {
       prompt:
         trimmed.length > 100 ? `${trimmed.substring(0, 100)}...` : trimmed,
-      input_image: basePhotoUrl,
+      image_input: [basePhotoUrl],
     });
 
     const prediction = await replicate.predictions.create({
-      model: "black-forest-labs/flux-kontext-max",
+      model: "google/nano-banana-2",
       input: {
         prompt: trimmed,
-        input_image: basePhotoUrl,
+        image_input: [basePhotoUrl],
+        output_format: "png",
+        aspect_ratio: "match_input_image",
       },
     });
 

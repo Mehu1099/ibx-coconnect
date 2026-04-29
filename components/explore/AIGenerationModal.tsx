@@ -29,14 +29,15 @@ const SUGGESTION_CHIPS = [
   "Convert one lane into a dedicated bus lane",
 ];
 
-// Cycled through during the generating stage. FLUX Kontext Max takes
-// ~15–30s typically and up to ~45s on cold start, so the messages
-// need to fill that range without looping too quickly.
+// Cycled through during the generating stage. Nano Banana 2 is
+// Flash-tier — typically 8–15s, with the occasional cold start
+// pushing closer to 20s. Four messages × 4.5s covers the warm path
+// and gracefully repeats once if it runs longer.
 const LOADING_MESSAGES = [
   "Reading the location photo...",
+  "Reasoning about your vision...",
   "Reimagining this corner of Flatbush...",
-  "Making the requested changes...",
-  "Refining the details...",
+  "Adding the finishing touches...",
 ];
 const LOADING_MESSAGE_INTERVAL_MS = 4500;
 
@@ -563,7 +564,7 @@ function GeneratingView({ progress }: { progress: GenerationProgress }) {
           textAlign: "center",
         }}
       >
-        This usually takes 15–30 seconds.
+        This usually takes 10–20 seconds.
       </div>
     </motion.div>
   );

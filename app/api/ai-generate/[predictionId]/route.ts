@@ -36,18 +36,25 @@ export async function GET(
 
     if (prediction.status === "succeeded") {
       // Output may be a string or a string array depending on the model.
-      // FLUX returns an array of one URL, but be defensive.
+      // Nano Banana 2 returns an array of one URL; FLUX variants returned
+      // either form historically, so handle both defensively.
       const output = prediction.output;
       const imageUrl = Array.isArray(output)
         ? (output[0] as string | undefined)
         : (output as string | undefined);
 
       if (!imageUrl) {
+        console.error(
+          "[ai-generate-status] No image URL in output:",
+          prediction.output,
+        );
         return NextResponse.json({
           status: "failed",
           error: "No image in output",
         });
       }
+
+      console.log("[ai-generate-status] Generated image URL:", imageUrl);
 
       const imageResponse = await fetch(imageUrl);
       if (!imageResponse.ok) {
@@ -58,11 +65,11 @@ export async function GET(
       }
       const imageBuffer = await imageResponse.arrayBuffer();
 
-      const filename = `${predictionId}-${Date.now()}.webp`;
+      const filename = `${predictionId}-${Date.now()}.png`;
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(filename, imageBuffer, {
-          contentType: "image/webp",
+          contentType: "image/png",
           cacheControl: "3600",
         });
 
