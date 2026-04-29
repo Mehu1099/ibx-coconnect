@@ -78,18 +78,52 @@ export default function AIProposalsPanel({
           flexDirection: "column",
         }}
       >
+        {/* White pill matches the visual language of the top-left
+            "Back" button and "active concerns" banner — slate text
+            on its own was unreadable against the photo. */}
         <div
           style={{
-            paddingLeft: 4,
-            marginBottom: 8,
-            fontSize: 10,
-            fontWeight: 600,
-            letterSpacing: "0.6px",
-            textTransform: "uppercase",
-            color: SLATE,
+            display: "inline-flex",
+            alignSelf: "flex-start",
+            alignItems: "center",
+            gap: 6,
+            background: "rgba(255, 255, 255, 0.95)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            padding: "6px 12px",
+            borderRadius: 999,
+            marginBottom: 12,
+            marginLeft: 4,
+            boxShadow: "0 2px 8px rgba(11, 29, 58, 0.08)",
+            border: "1px solid rgba(11, 29, 58, 0.06)",
           }}
         >
-          AI Proposals · {items.length}
+          <div
+            aria-hidden
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: CORAL,
+            }}
+          />
+          <span
+            style={{
+              fontSize: 10,
+              color: NAVY,
+              textTransform: "uppercase",
+              letterSpacing: "0.6px",
+              fontWeight: 600,
+            }}
+          >
+            AI Proposals
+          </span>
+          <span style={{ fontSize: 10, color: SLATE, fontWeight: 600 }}>
+            ·
+          </span>
+          <span style={{ fontSize: 11, color: CORAL, fontWeight: 700 }}>
+            {items.length}
+          </span>
         </div>
 
         {/* Scroll container. Native scrollbar is hidden via the
