@@ -144,21 +144,42 @@ export async function POST(req: NextRequest) {
     // only changes what the prompt describes. We deliberately don't
     // wrap the user's prompt with extra style hints — that pulled the
     // earlier flux-dev attempt off the source image entirely.
+    //
+    // aspect_ratio is intentionally OMITTED — passing
+    // "match_input_image" was tripping FLUX.2 Pro's pre-validation with
+    // "requires at least one input image" before it actually inspected
+    // input_image. With it removed, the model infers output dimensions
+    // from input_image automatically.
+    //
+    // If input_image still doesn't reach the model, try one of these
+    // alternative parameter names (some Replicate deployments differ):
+    //   1. image_url: basePhotoUrl   (Together AI-style)
+    //   2. image: basePhotoUrl       (older Replicate convention)
+    //   3. images: [basePhotoUrl]    (array form)
+    //   4. input_images: [basePhotoUrl]  (multi-reference array)
     const prediction = await replicate.predictions.create({
       model: "black-forest-labs/flux-2-pro",
       input: {
         prompt: trimmed,
         input_image: basePhotoUrl,
-        aspect_ratio: "match_input_image",
         output_format: "webp",
         output_quality: 90,
         safety_tolerance: 2,
       },
     });
 
-    console.log("[ai-generate] Prediction created:", {
+    console.log("[ai-generate] Replicate prediction created:", {
       predictionId: prediction.id,
       status: prediction.status,
+      model: "black-forest-labs/flux-2-pro",
+      // Drop this URL into a browser to inspect the exact input
+      // Replicate received and the run logs/error if any.
+      dashboardUrl: `https://replicate.com/p/${prediction.id}`,
+      inputSent: {
+        prompt:
+          trimmed.length > 80 ? `${trimmed.substring(0, 80)}...` : trimmed,
+        input_image: basePhotoUrl,
+      },
     });
 
     return NextResponse.json({

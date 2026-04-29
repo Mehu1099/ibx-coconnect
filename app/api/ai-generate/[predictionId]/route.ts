@@ -86,6 +86,19 @@ export async function GET(
     }
 
     if (prediction.status === "failed" || prediction.status === "canceled") {
+      // Surface the FULL Replicate-side error in Vercel logs. The
+      // client only sees prediction.error (a short string), but the
+      // model's own logs often contain the actual diagnostic — e.g.
+      // missing parameter names, bad URL, content-policy block.
+      const rawLogs =
+        typeof prediction.logs === "string" ? prediction.logs : undefined;
+      console.error("[ai-generate-status] Prediction failed:", {
+        predictionId: prediction.id,
+        status: prediction.status,
+        error: prediction.error,
+        logs: rawLogs ? rawLogs.substring(0, 500) : undefined,
+      });
+
       return NextResponse.json({
         status: "failed",
         error:
@@ -95,7 +108,7 @@ export async function GET(
 
     return NextResponse.json({ status: prediction.status });
   } catch (error: unknown) {
-    console.error("Status check error:", error);
+    console.error("[ai-generate-status] Status check error:", error);
     const message =
       error instanceof Error ? error.message : "Status check failed";
     return NextResponse.json({ error: message }, { status: 500 });
