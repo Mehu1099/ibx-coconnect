@@ -36,6 +36,16 @@ export async function POST(req: NextRequest) {
       sessionId?: string;
     };
 
+    // Visible in `vercel logs` / Functions tab. Truncate sessionId so
+    // the log line stays scannable; we only need a prefix to correlate
+    // with the same session's later poll requests.
+    console.log("[ai-generate] Request received:", {
+      locationId,
+      promptLength: prompt?.length,
+      basePhotoUrl,
+      sessionId: sessionId ? `${sessionId.substring(0, 8)}...` : null,
+    });
+
     if (
       typeof locationId !== "string" ||
       typeof prompt !== "string" ||
@@ -78,6 +88,57 @@ export async function POST(req: NextRequest) {
     }
     recentGenerations.set(sessionId, Date.now());
 
+    // Pre-flight HEAD on the photo URL. Replicate fetches the image
+    // server-side and surfaces a cryptic
+    // "aspect_ratio='match_input_image' requires at least one input image"
+    // error if the URL 404s — so we'd rather fail here with a clear
+    // message and a log line we can grep.
+    try {
+      const imageCheck = await fetch(basePhotoUrl, { method: "HEAD" });
+      if (!imageCheck.ok) {
+        console.error(
+          "[ai-generate] Image URL returned non-OK status:",
+          imageCheck.status,
+          basePhotoUrl,
+        );
+        return NextResponse.json(
+          {
+            error: `Could not load location photo (status ${imageCheck.status}). The photo URL may be incorrect.`,
+          },
+          { status: 400 },
+        );
+      }
+      const contentType = imageCheck.headers.get("content-type") || "";
+      if (!contentType.startsWith("image/")) {
+        console.error(
+          "[ai-generate] URL did not return an image:",
+          contentType,
+          basePhotoUrl,
+        );
+        return NextResponse.json(
+          { error: "The provided URL did not return an image." },
+          { status: 400 },
+        );
+      }
+      console.log(
+        "[ai-generate] Image URL validated:",
+        basePhotoUrl,
+        contentType,
+      );
+    } catch (fetchError: unknown) {
+      const msg =
+        fetchError instanceof Error ? fetchError.message : "unknown";
+      console.error(
+        "[ai-generate] Failed to fetch image URL:",
+        msg,
+        basePhotoUrl,
+      );
+      return NextResponse.json(
+        { error: "Failed to validate location photo URL." },
+        { status: 400 },
+      );
+    }
+
     // FLUX.2 Pro is an instruction-based image editor: it preserves the
     // source photo's structure (buildings, perspective, lighting) and
     // only changes what the prompt describes. We deliberately don't
@@ -95,12 +156,17 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    console.log("[ai-generate] Prediction created:", {
+      predictionId: prediction.id,
+      status: prediction.status,
+    });
+
     return NextResponse.json({
       predictionId: prediction.id,
       status: prediction.status,
     });
   } catch (error: unknown) {
-    console.error("AI generation error:", error);
+    console.error("[ai-generate] error:", error);
     const message =
       error instanceof Error ? error.message : "Generation failed";
     return NextResponse.json({ error: message }, { status: 500 });

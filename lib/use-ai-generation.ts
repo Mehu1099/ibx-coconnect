@@ -40,6 +40,14 @@ export function useAIGeneration() {
       try {
         const sessionId = getAnonymousSessionId();
 
+        // Mirrors the server log so a single browser tab can be
+        // correlated with the Vercel logs by the photo URL it sent.
+        console.log("[ai-generate] Sending request:", {
+          locationId,
+          basePhotoUrl,
+          promptLength: prompt.length,
+        });
+
         const startResponse = await fetch("/api/ai-generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
