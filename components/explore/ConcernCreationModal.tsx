@@ -6,6 +6,11 @@ import {
   CONCERN_CATEGORIES,
   type ConcernCategory,
 } from "@/lib/concern-categories";
+import {
+  getPopoverContainerStyle,
+  pickPopoverPlacement,
+} from "@/lib/popover-position";
+import { Z_INDEX } from "@/lib/z-index";
 
 const CORAL = "#F47560";
 const NAVY = "#0B1D3A";
@@ -49,6 +54,11 @@ export default function ConcernCreationModal({
     onSave(trimmed, category);
   };
 
+  // Right-edge clicks open the dialog to the LEFT of the marker (so it
+  // doesn't overlap the planner question rail). Top-edge clicks open
+  // it BELOW (so it doesn't overflow off-screen).
+  const placement = pickPopoverPlacement(x, y);
+
   return (
     <div
       className="absolute"
@@ -56,7 +66,7 @@ export default function ConcernCreationModal({
         left: `${x}%`,
         top: `${y}%`,
         transform: "translate(-50%, -50%)",
-        zIndex: 45,
+        zIndex: Z_INDEX.active_interaction.composer,
       }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -112,10 +122,7 @@ export default function ConcernCreationModal({
 
       <motion.div
         style={{
-          position: "absolute",
-          left: "50%",
-          bottom: "calc(100% + 14px)",
-          transform: "translateX(-50%)",
+          ...getPopoverContainerStyle(placement, 14),
           background: CREAM,
           borderRadius: 12,
           padding: 14,

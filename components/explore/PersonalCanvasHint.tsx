@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { Z_INDEX } from "@/lib/z-index";
 
 type Props = {
   /** True when the user has zero submitted + zero drafted contributions
@@ -22,7 +23,7 @@ export default function PersonalCanvasHint({ show }: Props) {
         bottom: 110,
         left: "50%",
         x: "-50%",
-        zIndex: 24,
+        zIndex: Z_INDEX.passive.floating_toolbar,
         background: "rgba(245, 242, 235, 0.96)",
         border: "1px solid rgba(244, 117, 96, 0.3)",
         padding: "8px 16px",

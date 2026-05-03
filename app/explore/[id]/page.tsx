@@ -68,6 +68,7 @@ import { EXPLORE_LOCATIONS } from "@/lib/explore-locations";
 import { PLANNER_QUESTIONS } from "@/lib/planner-questions";
 import { getAnonymousSessionId } from "@/lib/supabase-client";
 import { useRealtimeConcerns } from "@/lib/use-realtime-concerns";
+import { Z_INDEX } from "@/lib/z-index";
 
 const NAVY = "#0B1D3A";
 const CREAM = "#EDE5D5";
@@ -915,7 +916,7 @@ export default function LocationPage() {
               top: 88,
               left: "50%",
               transform: "translateX(-50%)",
-              zIndex: 60,
+              zIndex: Z_INDEX.active_interaction.toast,
               background: NAVY,
               color: "#F5F2EB",
               padding: "10px 18px",
@@ -942,7 +943,7 @@ export default function LocationPage() {
         {leaving && (
           <motion.div
             className="fixed inset-0"
-            style={{ zIndex: 90, background: "#FFFFFF", pointerEvents: "all" }}
+            style={{ zIndex: Z_INDEX.leaving_overlay, background: "#FFFFFF", pointerEvents: "all" }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

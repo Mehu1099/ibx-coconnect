@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { Z_INDEX } from "@/lib/z-index";
 
 type Props = {
   label: string;
@@ -21,10 +22,11 @@ export default function LocationTopNav({ label, subtitle, onBack }: Props) {
       <motion.button
         type="button"
         onClick={onBack}
-        className="fixed z-40 cursor-pointer flex items-center gap-2 rounded-full"
+        className="fixed cursor-pointer flex items-center gap-2 rounded-full"
         style={{
           top: 24,
           left: 24,
+          zIndex: Z_INDEX.passive.location_title,
           background: PILL_BG,
           padding: "10px 18px",
           border: "1px solid #E0DCD4",
@@ -63,10 +65,11 @@ export default function LocationTopNav({ label, subtitle, onBack }: Props) {
 
       {/* Right pill — location label */}
       <motion.div
-        className="fixed z-40 rounded-full"
+        className="fixed rounded-full"
         style={{
           top: 24,
           right: 24,
+          zIndex: Z_INDEX.passive.location_title,
           background: PILL_BG,
           padding: "10px 18px",
           border: "1px solid #E0DCD4",

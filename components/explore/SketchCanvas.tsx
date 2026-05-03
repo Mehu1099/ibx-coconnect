@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SketchPoint, SketchStroke } from "@/lib/database-types";
+import { Z_INDEX } from "@/lib/z-index";
 
 type Props = {
   isActive: boolean;
@@ -167,7 +168,7 @@ export default function SketchCanvas({
         inset: 0,
         width: "100%",
         height: "100%",
-        zIndex: isActive ? 15 : 8,
+        zIndex: isActive ? Z_INDEX.markers.sketch : Z_INDEX.passive.sketch_inactive,
         pointerEvents: isActive ? "auto" : "none",
         // Hide the system cursor in erase mode — the rendered indicator
         // becomes the cursor, so the user sees the exact footprint of

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "components/_archived_engage/**",
+    "app/engage/_archived_page.tsx.bak",
   ]),
 ]);
 

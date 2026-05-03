@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { Z_INDEX } from "@/lib/z-index";
 
 export type ToolId = "sticky" | "sketch" | "concern" | "ai";
 
@@ -245,7 +246,9 @@ export default function LocationToolbar({
         bottom: 32,
         left: "50%",
         transform: "translateX(-50%)",
-        zIndex: tutorialHighlight ? 110 : 40,
+        zIndex: tutorialHighlight
+          ? Z_INDEX.tutorial.spotlight
+          : Z_INDEX.passive.floating_toolbar,
       }}
     >
       {/* Tutorial step 2 — separate aura sibling behind the toolbar.

@@ -2,6 +2,12 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { memo, useEffect, useRef, useState } from "react";
+import {
+  getPopoverArrowStyle,
+  getPopoverContainerStyle,
+  pickPopoverPlacement,
+} from "@/lib/popover-position";
+import { Z_INDEX } from "@/lib/z-index";
 
 const CORAL = "#F47560";
 const TEAL = "#1ABFAD";
@@ -58,6 +64,14 @@ function StickyNoteDotInner({
   // (only when not selected, so the two never stack).
   const showHoverPreview = hovered && !selected && !!annotation.content;
 
+  // Flip the popover/edit card to the LEFT when the marker is in the
+  // right ~30% of the photo so it doesn't overlap the planner rail,
+  // and BELOW when near the top edge so it doesn't overflow up.
+  const placement = pickPopoverPlacement(
+    annotation.x_position,
+    annotation.y_position,
+  );
+
   return (
     <div
       className="absolute"
@@ -65,7 +79,9 @@ function StickyNoteDotInner({
         left: `${annotation.x_position}%`,
         top: `${annotation.y_position}%`,
         transform: "translate(-50%, -50%)",
-        zIndex: selected ? 35 : 30,
+        zIndex: selected
+          ? Z_INDEX.markers.sticky_note_selected
+          : Z_INDEX.markers.sticky_note,
       }}
     >
       {/* Shimmer ring — CSS-driven keyframes (compositor thread).
@@ -145,18 +161,18 @@ function StickyNoteDotInner({
         </span>
       </motion.button>
 
-      {/* Read-only hover preview — small content card with a
-          downward-pointing arrow. Only appears when NOT selected; the
-          fuller NoteCard with edit/delete takes over on click. */}
+      {/* Read-only hover preview — small content card with an arrow
+          pointing back at the marker. Only appears when NOT selected;
+          the fuller NoteCard with edit/delete takes over on click.
+          Position flips based on `placement` so right-edge markers
+          don't overlap the planner rail. */}
       <AnimatePresence>
         {showHoverPreview && (
           <motion.div
             key="hover-preview"
-            className="absolute pointer-events-none"
+            className="pointer-events-none"
             style={{
-              left: "50%",
-              bottom: "calc(100% + 12px)",
-              transform: "translateX(-50%)",
+              ...getPopoverContainerStyle(placement, 12),
               background: "#FFFFFF",
               padding: "10px 14px",
               borderRadius: 10,
@@ -169,7 +185,7 @@ function StickyNoteDotInner({
               color: NAVY,
               whiteSpace: "normal",
               wordBreak: "break-word",
-              zIndex: 50,
+              zIndex: Z_INDEX.active_interaction.popover,
             }}
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
@@ -177,19 +193,7 @@ function StickyNoteDotInner({
             transition={{ duration: 0.15, ease: "easeOut" }}
           >
             {annotation.content}
-            <span
-              aria-hidden
-              style={{
-                position: "absolute",
-                bottom: -5,
-                left: "50%",
-                transform: "translateX(-50%) rotate(45deg)",
-                width: 10,
-                height: 10,
-                background: "#FFFFFF",
-                boxShadow: "2px 2px 4px rgba(0,0,0,0.04)",
-              }}
-            />
+            <span aria-hidden style={getPopoverArrowStyle(placement)} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -202,6 +206,7 @@ function StickyNoteDotInner({
             content={annotation.content ?? ""}
             selected
             isDraft={isDraft}
+            placement={placement}
             onDelete={onDelete}
             onUpdate={onUpdate}
           />
@@ -221,12 +226,14 @@ function NoteCard({
   content,
   selected,
   isDraft,
+  placement,
   onDelete,
   onUpdate,
 }: {
   content: string;
   selected: boolean;
   isDraft: boolean;
+  placement: ReturnType<typeof pickPopoverPlacement>;
   onDelete: () => void;
   onUpdate: (content: string) => void;
 }) {
@@ -235,11 +242,8 @@ function NoteCard({
 
   return (
     <motion.div
-      className="absolute"
       style={{
-        left: "50%",
-        bottom: "calc(100% + 12px)",
-        transform: "translateX(-50%)",
+        ...getPopoverContainerStyle(placement, 12),
         background: "#FFFFFF",
         borderRadius: 10,
         padding: 12,
@@ -249,6 +253,7 @@ function NoteCard({
         border: isDraft ? `1px dashed ${CORAL}` : `1px solid ${SOFT_BORDER}`,
         fontFamily: "var(--font-space-grotesk)",
         color: NAVY,
+        zIndex: Z_INDEX.active_interaction.popover,
       }}
       initial={{ opacity: 0, y: 6, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -420,6 +425,11 @@ export function StickyNoteComposer({ x, y, onSave, onCancel }: ComposerProps) {
     onSave(v);
   };
 
+  // Right-edge clicks open the dialog to the LEFT of the marker (so it
+  // doesn't overlap the planner question rail). Top-edge clicks open
+  // it BELOW (so it doesn't overflow off-screen).
+  const placement = pickPopoverPlacement(x, y);
+
   return (
     <div
       className="absolute"
@@ -427,7 +437,7 @@ export function StickyNoteComposer({ x, y, onSave, onCancel }: ComposerProps) {
         left: `${x}%`,
         top: `${y}%`,
         transform: "translate(-50%, -50%)",
-        zIndex: 45,
+        zIndex: Z_INDEX.active_interaction.composer,
       }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -464,10 +474,7 @@ export function StickyNoteComposer({ x, y, onSave, onCancel }: ComposerProps) {
 
       <motion.div
         style={{
-          position: "absolute",
-          left: "50%",
-          bottom: "calc(100% + 14px)",
-          transform: "translateX(-50%)",
+          ...getPopoverContainerStyle(placement, 14),
           background: "#FFFFFF",
           borderRadius: 10,
           padding: 12,

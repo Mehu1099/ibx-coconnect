@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { Z_INDEX } from "@/lib/z-index";
 
 const NAVY = "#0B1D3A";
 const TEAL = "#1ABFAD";
@@ -118,7 +119,7 @@ function TutorialBackdrop({ visible }: { visible: boolean }) {
             background: "rgba(11, 29, 58, 0.5)",
             backdropFilter: "blur(4px)",
             WebkitBackdropFilter: "blur(4px)",
-            zIndex: 90,
+            zIndex: Z_INDEX.tutorial.backdrop,
             pointerEvents: "none",
           }}
         />
@@ -143,7 +144,7 @@ function TutorialCard({
       className="fixed"
       style={{
         ...CARD_ANCHOR[cfg.cardPosition],
-        zIndex: 120,
+        zIndex: Z_INDEX.tutorial.message,
         width: "min(320px, calc(100vw - 32px))",
         background: NAVY,
         border: "1px solid rgba(26, 191, 173, 0.3)",

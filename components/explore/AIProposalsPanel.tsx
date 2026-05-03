@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
 import type { DatabaseAIProposal } from "@/lib/database-types";
 import type { DraftAIProposal } from "@/lib/draft-state";
+import { Z_INDEX } from "@/lib/z-index";
 
 const NAVY = "#0B1D3A";
 const CORAL = "#F47560";
@@ -71,7 +72,7 @@ export default function AIProposalsPanel({
           top: "20%",
           width: 220,
           maxHeight: "calc(80vh - 100px)",
-          zIndex: 15,
+          zIndex: Z_INDEX.passive.ai_proposals,
           fontFamily: "var(--font-space-grotesk)",
           pointerEvents: "auto",
           display: "flex",
@@ -352,7 +353,7 @@ function Lightbox({
       <motion.div
         className="fixed inset-0"
         style={{
-          zIndex: 140,
+          zIndex: Z_INDEX.active_interaction.modal_backdrop,
           background: "rgba(11, 29, 58, 0.7)",
           backdropFilter: "blur(8px)",
           WebkitBackdropFilter: "blur(8px)",
@@ -365,7 +366,7 @@ function Lightbox({
       />
       <motion.div
         className="fixed flex items-center justify-center"
-        style={{ inset: 0, zIndex: 145, padding: 24, pointerEvents: "none" }}
+        style={{ inset: 0, zIndex: Z_INDEX.active_interaction.modal_content, padding: 24, pointerEvents: "none" }}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}

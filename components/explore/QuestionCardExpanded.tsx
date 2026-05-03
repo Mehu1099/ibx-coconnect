@@ -256,11 +256,13 @@ export default function QuestionCardExpanded({
         </button>
       </motion.div>
 
-      {/* Existing + draft responses */}
+      {/* Existing + draft responses. Capped to ~30vh so a long history
+          doesn't push the "Add response" button off-screen — the list
+          scrolls internally instead. */}
       {responses.length > 0 && (
         <motion.div
           variants={itemVariants}
-          style={{ marginTop: 14, display: "grid", gap: 6 }}
+          style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 6 }}
         >
           <div
             style={{
@@ -273,52 +275,65 @@ export default function QuestionCardExpanded({
           >
             Your responses ({responses.length})
           </div>
-          {responses.map((r) => (
-            <div
-              key={r.id}
-              style={{
-                background: CREAM,
-                border: r.isDraft
-                  ? `1px dashed ${CORAL}`
-                  : `1px solid ${SOFT_BORDER}`,
-                borderRadius: 10,
-                padding: "8px 10px",
-                fontSize: 12,
-                lineHeight: 1.4,
-                color: NAVY,
-              }}
-            >
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              maxHeight: "30vh",
+              overflowY: "auto",
+              paddingRight: 2,
+              scrollbarWidth: "thin",
+              scrollbarColor: "rgba(11,29,58,0.12) transparent",
+            }}
+          >
+            {responses.map((r) => (
               <div
+                key={r.id}
                 style={{
-                  wordBreak: "break-word",
-                  fontStyle: r.isDraft ? "italic" : "normal",
+                  background: CREAM,
+                  border: r.isDraft
+                    ? `1px dashed ${CORAL}`
+                    : `1px solid ${SOFT_BORDER}`,
+                  borderRadius: 10,
+                  padding: "8px 10px",
+                  fontSize: 12,
+                  lineHeight: 1.4,
+                  color: NAVY,
                 }}
               >
-                {r.isDraft && (
-                  <span
-                    style={{
-                      color: CORAL,
-                      fontWeight: 600,
-                      marginRight: 4,
-                      fontStyle: "normal",
-                    }}
-                  >
-                    (Draft)
-                  </span>
-                )}
-                {r.text}
+                <div
+                  style={{
+                    wordBreak: "break-word",
+                    fontStyle: r.isDraft ? "italic" : "normal",
+                  }}
+                >
+                  {r.isDraft && (
+                    <span
+                      style={{
+                        color: CORAL,
+                        fontWeight: 600,
+                        marginRight: 4,
+                        fontStyle: "normal",
+                      }}
+                    >
+                      (Draft)
+                    </span>
+                  )}
+                  {r.text}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: SLATE,
+                    marginTop: 4,
+                  }}
+                >
+                  {formatTimestamp(r.createdAt)}
+                </div>
               </div>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: SLATE,
-                  marginTop: 4,
-                }}
-              >
-                {formatTimestamp(r.createdAt)}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </motion.div>
       )}
     </motion.div>

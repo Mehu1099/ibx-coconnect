@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { AIProcessingScreen } from "@/components/explore/processing/AIProcessingScreen";
 import { useAIGeneration } from "@/lib/use-ai-generation";
+import { Z_INDEX } from "@/lib/z-index";
 
 const NAVY = "#0B1D3A";
 const CORAL = "#F47560";
@@ -180,7 +181,7 @@ function ModalRoot({
       <motion.div
         className="fixed inset-0"
         style={{
-          zIndex: 130,
+          zIndex: Z_INDEX.active_interaction.modal_backdrop,
           background: "rgba(11, 29, 58, 0.5)",
           backdropFilter: "blur(8px)",
           WebkitBackdropFilter: "blur(8px)",
@@ -200,7 +201,7 @@ function ModalRoot({
           result. */}
       <motion.div
         className="fixed flex items-center justify-center"
-        style={{ inset: 0, zIndex: 135, padding: 16, pointerEvents: "none" }}
+        style={{ inset: 0, zIndex: Z_INDEX.active_interaction.modal_content, padding: 16, pointerEvents: "none" }}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}

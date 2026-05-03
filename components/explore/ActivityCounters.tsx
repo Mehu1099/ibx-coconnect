@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { Z_INDEX } from "@/lib/z-index";
 import AnimatedCounter from "./AnimatedCounter";
 
 type Props = {
@@ -77,7 +78,7 @@ export default function ActivityCounters({ concerns, questions }: Props) {
         bottom: 32,
         right: 32,
         gap: 8,
-        zIndex: 40,
+        zIndex: Z_INDEX.passive.floating_toolbar,
       }}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}

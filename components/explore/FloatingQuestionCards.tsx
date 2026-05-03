@@ -5,6 +5,7 @@ import { memo, useEffect, useMemo, useState } from "react";
 import type { DatabaseQuestionResponse } from "@/lib/database-types";
 import type { DraftQuestionResponse } from "@/lib/draft-state";
 import type { PlannerQuestion } from "@/lib/planner-questions";
+import { Z_INDEX } from "@/lib/z-index";
 import QuestionCardExpanded, {
   type DisplayResponse,
 } from "./QuestionCardExpanded";
@@ -80,9 +81,17 @@ export default function FloatingQuestionCards({
     displayByQuestion[i] ?? [];
 
   // During the tutorial spotlight (step 3) lift z-index above the
-  // backdrop (z 90) so the cards read crisp through the blur.
-  const stackZ = tutorialHighlight ? 110 : 35;
+  // backdrop so the cards read crisp through the blur. Default sits
+  // at the lowest passive layer so any active dialog (composer,
+  // popover, modal) reliably renders above it.
+  const stackZ = tutorialHighlight
+    ? Z_INDEX.tutorial.spotlight
+    : Z_INDEX.passive.planner_questions;
 
+  // Desktop rail: viewport-bounded, internally scrollable. The fade
+  // mask hints at hidden cards above/below; the native scrollbar is
+  // suppressed via the `.planner-rail-scroll` global style at the
+  // bottom of this file.
   const stackStyle: React.CSSProperties = isMobile
     ? {
         position: "fixed",
@@ -98,20 +107,36 @@ export default function FloatingQuestionCards({
       }
     : {
         position: "fixed",
-        top: "25%",
+        top: 120,
         right: 24,
         zIndex: stackZ,
+        width: 256,
+        maxWidth: "calc(100vw - 48px)",
+        maxHeight: "calc(100vh - 140px)",
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
+        paddingBottom: 16,
+        paddingTop: 4,
         display: "flex",
         flexDirection: "column",
         gap: 12,
-        width: 256,
-        maxWidth: "calc(100vw - 48px)",
+        // Fade mask: 16px gradient bands top + bottom hint at hidden
+        // content when the rail is scrollable.
+        maskImage:
+          "linear-gradient(to bottom, transparent 0px, black 16px, black calc(100% - 16px), transparent 100%)",
+        WebkitMaskImage:
+          "linear-gradient(to bottom, transparent 0px, black 16px, black calc(100% - 16px), transparent 100%)",
       };
 
   return (
     // `layout` on the container animates sibling reflow when one card
     // grows. Children are also `layout` so their position interpolates.
-    <motion.div layout style={stackStyle} transition={EXPAND_TRANSITION}>
+    <motion.div
+      layout
+      className={isMobile ? undefined : "planner-rail-scroll"}
+      style={stackStyle}
+      transition={EXPAND_TRANSITION}
+    >
       {questions.map((q, i) => {
         const isExpanded = expandedIndex === i;
         const isDimmed = expandedIndex !== null && expandedIndex !== i;
@@ -169,6 +194,20 @@ export default function FloatingQuestionCards({
           </motion.div>
         );
       })}
+      <style jsx>{`
+        :global(.planner-rail-scroll) {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(11, 29, 58, 0.12) transparent;
+          scroll-behavior: smooth;
+        }
+        :global(.planner-rail-scroll::-webkit-scrollbar) {
+          width: 0;
+          background: transparent;
+        }
+        :global(.planner-rail-scroll::-webkit-scrollbar-thumb) {
+          background: transparent;
+        }
+      `}</style>
     </motion.div>
   );
 }

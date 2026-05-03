@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { Z_INDEX } from "@/lib/z-index";
 
 type Props = {
   count: number;
@@ -13,7 +14,7 @@ export default function ConcernsBanner({ count }: Props) {
       style={{
         top: 76, // sits below the 24px+pill back button
         left: 24,
-        zIndex: 40,
+        zIndex: Z_INDEX.passive.active_concerns_banner,
       }}
     >
       {/* Aura sibling — animating scale + opacity is GPU-composited;

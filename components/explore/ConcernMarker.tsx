@@ -3,6 +3,12 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { memo, useEffect, useState } from "react";
 import { getConcernCategory } from "@/lib/concern-categories";
+import {
+  getPopoverArrowStyle,
+  getPopoverContainerStyle,
+  pickPopoverPlacement,
+} from "@/lib/popover-position";
+import { Z_INDEX } from "@/lib/z-index";
 
 const CORAL = "#F47560";
 const TEAL = "#1ABFAD";
@@ -118,6 +124,14 @@ function ConcernMarkerInner({
       : realtimeEchoes;
   const voices = 1 + effectiveEchoes;
 
+  // Flip the hover popover to the LEFT when the marker is in the
+  // right ~30% of the photo so it doesn't overlap the planner rail,
+  // and BELOW when near the top edge so it doesn't overflow up.
+  const placement = pickPopoverPlacement(
+    concern.x_position,
+    concern.y_position,
+  );
+
   return (
     <div
       className="absolute concern-marker"
@@ -125,7 +139,9 @@ function ConcernMarkerInner({
         left: `${concern.x_position}%`,
         top: `${concern.y_position}%`,
         transform: "translate(-50%, -50%)",
-        zIndex: hovered ? 35 : 32,
+        zIndex: hovered
+          ? Z_INDEX.markers.concern_hovered
+          : Z_INDEX.markers.concern,
         ["--shimmer-delay" as string]: `${(index % 8) * 0.5}s`,
       }}
       onMouseEnter={() => setHovered(true)}
@@ -191,18 +207,15 @@ function ConcernMarkerInner({
         {hovered && (
           <motion.div
             key="concern-popover"
-            className="absolute"
             style={{
-              left: "50%",
-              bottom: "calc(100% + 12px)",
-              transform: "translateX(-50%)",
+              ...getPopoverContainerStyle(placement, 12),
               background: "#FFFFFF",
               padding: "12px 14px",
               borderRadius: 12,
               minWidth: 220,
               maxWidth: 280,
               boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
-              zIndex: 50,
+              zIndex: Z_INDEX.active_interaction.popover,
               fontFamily: "var(--font-space-grotesk)",
               color: NAVY,
             }}
@@ -347,19 +360,7 @@ function ConcernMarkerInner({
               </p>
             )}
 
-            <span
-              aria-hidden
-              style={{
-                position: "absolute",
-                bottom: -5,
-                left: "50%",
-                transform: "translateX(-50%) rotate(45deg)",
-                width: 10,
-                height: 10,
-                background: "#FFFFFF",
-                boxShadow: "2px 2px 4px rgba(0,0,0,0.04)",
-              }}
-            />
+            <span aria-hidden style={getPopoverArrowStyle(placement)} />
           </motion.div>
         )}
       </AnimatePresence>

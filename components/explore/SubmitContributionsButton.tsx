@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { Z_INDEX } from "@/lib/z-index";
 
 type Props = {
   count: number;
@@ -27,7 +28,7 @@ export default function SubmitContributionsButton({ count, onClick }: Props) {
             bottom: 110,
             left: "50%",
             x: "-50%",
-            zIndex: 25,
+            zIndex: Z_INDEX.passive.floating_toolbar,
           }}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

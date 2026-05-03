@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { Z_INDEX } from "@/lib/z-index";
 
 const NAVY = "#0B1D3A";
 const CORAL = "#F47560";
@@ -65,7 +66,7 @@ export default function SketchToolbar({
             bottom: 110,
             left: "50%",
             translateX: "-50%",
-            zIndex: 41,
+            zIndex: Z_INDEX.passive.floating_toolbar,
             background: "rgba(255, 255, 255, 0.96)",
             borderRadius: 14,
             padding: "8px 12px",

@@ -35,10 +35,16 @@ export default function CinematicPhoto({
   );
 
   return (
+    // No zIndex on this wrapper: explicit `zIndex: 0` would create a
+    // stacking context, trapping the markers and composer dialogs
+    // rendered as children below — globally they'd then sit at z=0,
+    // beneath the planner question rail (~10) regardless of their own
+    // inner z values. We rely on document order (this is the first
+    // child of <main>) plus children's explicit z-indexes instead.
     <div
       ref={setRef}
       className="absolute inset-0"
-      style={{ zIndex: 0, cursor, overflow: "hidden" }}
+      style={{ cursor, overflow: "hidden" }}
       onClick={onClick}
     >
       {/* Entrance — scale + opacity + blur fade-in. Photo is perfectly

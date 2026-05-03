@@ -7,7 +7,7 @@ import AuthBadge from "@/components/auth/AuthBadge";
 
 const NAV_LINKS: { label: string; href: string; active?: boolean }[] = [
   { label: "Explore", href: "/explore", active: true },
-  { label: "Engage", href: "#" },
+  { label: "Engage", href: "/engage" },
   { label: "Analyze", href: "#" },
 ];
 
