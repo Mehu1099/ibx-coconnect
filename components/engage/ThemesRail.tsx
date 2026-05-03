@@ -2,23 +2,40 @@
 
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
+import type { Contribution } from "@/lib/use-engage-data";
+import { formatTimeAgo } from "@/lib/use-engage-data";
+import type { Theme } from "@/lib/use-themes";
+import { RefreshThemesButton } from "./RefreshThemesButton";
+import { ThemeCard } from "./ThemeCard";
 
 interface ThemesRailProps {
   contributionCount: number;
   selectedLocationId: string | null;
+  // Theme data + selection — wired in 10B. When `concernThemes` /
+  // `visionThemes` are empty the rail falls back to the 10A empty
+  // state + preview card.
+  concernThemes: Theme[];
+  visionThemes: Theme[];
+  hasThemes: boolean;
+  latestGeneratedAt: string | null;
+  selectedThemeId: string | null;
+  onSelectTheme: (id: string | null) => void;
+  // Used by ThemeCard to render quotes when a card is expanded.
+  allContributions: Contribution[];
 }
-
-// Left rail wrapped in a single solid surface so the title, subtitle,
-// empty-state card, and group placeholders all read against the same
-// opaque background instead of fighting the map underneath. Session 10B
-// will swap the empty state + group placeholders for AI-clustered
-// theme cards.
 
 const RAIL_WIDTH = 340;
 
 export function ThemesRail({
   contributionCount,
   selectedLocationId,
+  concernThemes,
+  visionThemes,
+  hasThemes,
+  latestGeneratedAt,
+  selectedThemeId,
+  onSelectTheme,
+  allContributions,
 }: ThemesRailProps) {
   return (
     <aside
@@ -50,52 +67,72 @@ export function ThemesRail({
           padding: "16px 18px 14px",
           borderBottom: "1px solid rgba(11, 29, 58, 0.06)",
           flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "baseline",
-            justifyContent: "space-between",
-            gap: 8,
-          }}
-        >
-          <h2
+        <div>
+          <div
             style={{
-              margin: 0,
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <h2
+              style={{
+                margin: 0,
+                fontFamily: "var(--font-space-grotesk), sans-serif",
+                fontSize: 15,
+                fontWeight: 600,
+                color: "#0B1D3A",
+                letterSpacing: "-0.01em",
+              }}
+            >
+              Themes &amp; Patterns
+            </h2>
+            <span
+              style={{
+                fontFamily: "var(--font-jetbrains-mono), monospace",
+                fontSize: 9.5,
+                color: "#8899AA",
+                letterSpacing: "0.14em",
+              }}
+            >
+              FILE · 01
+            </span>
+          </div>
+          <p
+            style={{
+              margin: "4px 0 0",
               fontFamily: "var(--font-space-grotesk), sans-serif",
-              fontSize: 15,
-              fontWeight: 600,
-              color: "#0B1D3A",
-              letterSpacing: "-0.01em",
+              fontSize: 12,
+              color: "#6B7A8C",
+              lineHeight: 1.5,
             }}
           >
-            Themes &amp; Patterns
-          </h2>
-          <span
-            style={{
-              fontFamily: "var(--font-jetbrains-mono), monospace",
-              fontSize: 9.5,
-              color: "#8899AA",
-              letterSpacing: "0.14em",
-            }}
-          >
-            FILE · 01
-          </span>
+            {hasThemes
+              ? `${concernThemes.length + visionThemes.length} themes across ${contributionCount} contribution${contributionCount === 1 ? "" : "s"}${selectedLocationId ? ` at LOC-${selectedLocationId}` : ""}`
+              : `AI-clustered patterns across ${contributionCount} contribution${contributionCount === 1 ? "" : "s"}${selectedLocationId ? ` at LOC-${selectedLocationId}` : ""}`}
+          </p>
+          {hasThemes && latestGeneratedAt && (
+            <div
+              style={{
+                fontFamily: "var(--font-jetbrains-mono), monospace",
+                fontSize: 9.5,
+                color: "#8899AA",
+                letterSpacing: "0.1em",
+                marginTop: 4,
+              }}
+            >
+              GENERATED · {formatTimeAgo(latestGeneratedAt).toUpperCase()}
+            </div>
+          )}
         </div>
-        <p
-          style={{
-            margin: "4px 0 0",
-            fontFamily: "var(--font-space-grotesk), sans-serif",
-            fontSize: 12,
-            color: "#6B7A8C",
-            lineHeight: 1.5,
-          }}
-        >
-          AI-clustered patterns across {contributionCount} contribution
-          {contributionCount === 1 ? "" : "s"}
-          {selectedLocationId ? ` at LOC-${selectedLocationId}` : ""}
-        </p>
+
+        <RefreshThemesButton />
       </div>
 
       <div
@@ -109,12 +146,41 @@ export function ThemesRail({
           padding: "16px 14px 18px",
         }}
       >
-        <ThemesEmptyState contributionCount={contributionCount} />
-
-        <ThemeGroup kind="concerns" label="Concerns & Ideas" />
-        <ThemeGroup kind="visions" label="Visions for the Future" />
-
-        <ThemePreview />
+        {hasThemes ? (
+          <>
+            <ThemeGroupReal
+              kind="concerns"
+              label="Concerns & Ideas"
+              themes={concernThemes}
+              numPrefix="C"
+              selectedThemeId={selectedThemeId}
+              onSelectTheme={onSelectTheme}
+              allContributions={allContributions}
+            />
+            <ThemeGroupReal
+              kind="visions"
+              label="Visions for the Future"
+              themes={visionThemes}
+              numPrefix="V"
+              selectedThemeId={selectedThemeId}
+              onSelectTheme={onSelectTheme}
+              allContributions={allContributions}
+            />
+          </>
+        ) : (
+          <>
+            <ThemesEmptyState contributionCount={contributionCount} />
+            <ThemeGroupEmpty
+              kind="concerns"
+              label="Concerns & Ideas"
+            />
+            <ThemeGroupEmpty
+              kind="visions"
+              label="Visions for the Future"
+            />
+            <ThemePreview />
+          </>
+        )}
       </div>
 
       <style jsx>{`
@@ -215,59 +281,104 @@ function ThemesEmptyState({
   );
 }
 
-function ThemeGroup({
+function ThemeGroupHeader({
+  kind,
+  label,
+  count,
+}: {
+  kind: "concerns" | "visions";
+  label: string;
+  count: string;
+}) {
+  const fill = kind === "concerns" ? "#F47560" : "#1ABFAD";
+  const stroke = kind === "concerns" ? "#D85A45" : "#0F8A7E";
+  const halo =
+    kind === "concerns" ? "rgba(244,117,96,0.18)" : "rgba(26,191,173,0.18)";
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "14px 4px 10px",
+        marginTop: 12,
+        borderTop: "1px solid rgba(11,29,58,0.08)",
+      }}
+    >
+      {/* Halo swatch — wrapper holds the glow square, inner div is the
+          solid swatch. Building it as two layered absolutes (instead of
+          a box-shadow halo) gives the glow a sharp square edge that
+          matches the swatch shape. */}
+      <div
+        aria-hidden
+        style={{
+          position: "relative",
+          width: 14,
+          height: 14,
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: -4,
+            background: halo,
+            borderRadius: 2,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: fill,
+            border: `1px solid ${stroke}`,
+          }}
+        />
+      </div>
+
+      <span
+        style={{
+          fontFamily: "var(--font-space-grotesk), sans-serif",
+          fontSize: 13,
+          fontWeight: 600,
+          color: "#0B1D3A",
+          letterSpacing: "-0.005em",
+        }}
+      >
+        {label}
+      </span>
+
+      {/* Count tag with its own subtle background — anchors the right
+          edge of the group header. */}
+      <span
+        style={{
+          marginLeft: "auto",
+          fontFamily: "var(--font-jetbrains-mono), monospace",
+          fontSize: 9.5,
+          color: "#6B7A8C",
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          padding: "3px 8px",
+          background: "rgba(11,29,58,0.04)",
+          borderRadius: 2,
+        }}
+      >
+        {count}
+      </span>
+    </div>
+  );
+}
+
+function ThemeGroupEmpty({
   kind,
   label,
 }: {
   kind: "concerns" | "visions";
   label: string;
 }) {
-  const fill = kind === "concerns" ? "#F47560" : "#1ABFAD";
-  const stroke = kind === "concerns" ? "#D85A45" : "#0F8A7E";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "0 4px",
-        }}
-      >
-        <span
-          aria-hidden
-          style={{
-            width: 10,
-            height: 10,
-            borderRadius: 2,
-            background: fill,
-            border: `1px solid ${stroke}`,
-            flexShrink: 0,
-          }}
-        />
-        <span
-          style={{
-            fontFamily: "var(--font-space-grotesk), sans-serif",
-            fontSize: 13,
-            fontWeight: 600,
-            color: "#0B1D3A",
-            letterSpacing: "-0.005em",
-          }}
-        >
-          {label}
-        </span>
-        <span
-          style={{
-            marginLeft: "auto",
-            fontFamily: "var(--font-jetbrains-mono), monospace",
-            fontSize: 9.5,
-            color: "#8899AA",
-            letterSpacing: "0.1em",
-          }}
-        >
-          0 CARDS
-        </span>
-      </div>
+      <ThemeGroupHeader kind={kind} label={label} count="0 cards" />
       <div
         style={{
           padding: "10px 12px",
@@ -287,12 +398,53 @@ function ThemeGroup({
   );
 }
 
-// Worked-example card sitting at the bottom of the rail. Clearly
-// labeled "PREVIEW" with an out-of-band identifier (C-EX vs C-01) so
-// users don't mistake it for a real cluster — this is a documentation
-// piece showing the index-card structure that 10B will populate.
+function ThemeGroupReal({
+  kind,
+  label,
+  themes,
+  numPrefix,
+  selectedThemeId,
+  onSelectTheme,
+  allContributions,
+}: {
+  kind: "concerns" | "visions";
+  label: string;
+  themes: Theme[];
+  numPrefix: "C" | "V";
+  selectedThemeId: string | null;
+  onSelectTheme: (id: string | null) => void;
+  allContributions: Contribution[];
+}) {
+  if (themes.length === 0) {
+    return <ThemeGroupEmpty kind={kind} label={label} />;
+  }
+  const countLabel = `${themes.length} card${themes.length === 1 ? "" : "s"}`;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <ThemeGroupHeader kind={kind} label={label} count={countLabel} />
+      {themes.map((theme, i) => {
+        const fileNum = `${numPrefix}-${String(i + 1).padStart(2, "0")}`;
+        const isActive = selectedThemeId === theme.id;
+        return (
+          <ThemeCard
+            key={theme.id}
+            theme={theme}
+            fileNum={fileNum}
+            index={i}
+            isActive={isActive}
+            onSelect={() => onSelectTheme(isActive ? null : theme.id)}
+            contributions={allContributions}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// Worked-example card sitting at the bottom of the rail in the empty
+// state. Clearly labeled "PREVIEW" with C-EX so users don't mistake it
+// for a real cluster.
 function ThemePreview() {
-  // Sample station coverage for the 8-cell strip — purely illustrative.
   const SAMPLE_ACTIVE = new Set([0, 1, 2, 5]);
 
   return (
@@ -335,7 +487,6 @@ function ThemePreview() {
           opacity: 0.85,
         }}
       >
-        {/* Punched coral strip across the top edge. */}
         <div
           aria-hidden
           style={{
@@ -404,7 +555,6 @@ function ThemePreview() {
           running.
         </p>
 
-        {/* Eight-cell station strip — coverage indicator. */}
         <div
           style={{
             display: "flex",

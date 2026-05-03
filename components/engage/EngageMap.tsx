@@ -9,6 +9,16 @@ interface EngageMapProps {
   locationCounts: LocationCount[];
   selectedLocationId: string | null;
   onLocationClick: (id: string) => void;
+  // Set of location ids belonging to the currently-selected theme.
+  // When non-empty, those pins burn in the theme's saturated signature
+  // (white-ringed and surrounded by a soft atmospheric halo) and the
+  // rest fade dramatically so the theme reads at-a-glance.
+  selectedThemeStations?: string[];
+  selectedThemeColor?: {
+    solid: string;
+    soft: string;
+    deep: string;
+  } | null;
 }
 
 // Some pins have a close vertical neighbor below (e.g. 02 sits just
@@ -31,7 +41,19 @@ export function EngageMap({
   locationCounts,
   selectedLocationId,
   onLocationClick,
+  selectedThemeStations,
+  selectedThemeColor = null,
 }: EngageMapProps) {
+  // True when any theme is currently driving the map highlight. Used
+  // by the per-pin block below to fade non-theme pins and shift theme
+  // pins to the saturated signature.
+  const themeIsActive =
+    !!selectedThemeColor &&
+    !!selectedThemeStations &&
+    selectedThemeStations.length > 0;
+  const themeStationSet = themeIsActive
+    ? new Set(selectedThemeStations)
+    : null;
   const handleBackgroundClick = (e: React.MouseEvent<HTMLDivElement>) => {
     // Only fire when the click actually hits the map container itself
     // (not bubbled from a pin or a child overlay). Pins also call
@@ -131,22 +153,50 @@ export function EngageMap({
         const isActive = count > 0;
         const isHot = (lc?.hot ?? false) && isActive;
 
-        // Selected pins flip to teal — both the inner dot and the
-        // outer ring — so the selection state reads at a glance and
-        // doesn't fight the coral pulse on hot zones (which is paused
-        // during selection anyway).
-        const pinBg = isSelected
-          ? "#1ABFAD"
-          : isActive
-            ? isHot
-              ? "#D85A45"
-              : "#F47560"
-            : "#F9A48F";
-        const pinShadow = isSelected
-          ? "0 0 0 5px #fff, 0 0 0 9px #1ABFAD, 0 12px 28px -4px rgba(26,191,173,0.5)"
-          : isActive
-            ? "0 0 0 4px #fff, 0 8px 20px -4px rgba(244,117,96,0.4)"
-            : "0 0 0 3px #fff, 0 4px 12px -2px rgba(244,117,96,0.25)";
+        const isInActiveTheme =
+          themeIsActive && themeStationSet!.has(location.id);
+        const isFadedByTheme = themeIsActive && !isInActiveTheme;
+
+        // Pin colour hierarchy (highest priority first):
+        //   1. In active theme → saturated signature solid + soft
+        //      atmospheric halo, white text
+        //   2. Faded by active theme → soft coral, opacity 0.35
+        //   3. Selected location filter → teal
+        //   4. Active default → coral / deep coral if hot
+        //   5. Inactive → soft coral
+        let pinBackground: string;
+        let pinBoxShadow: string;
+        let pinOpacity = 1;
+        if (isInActiveTheme && selectedThemeColor) {
+          pinBackground = selectedThemeColor.solid;
+          pinBoxShadow = `0 0 0 4px #fff, 0 0 0 9px ${selectedThemeColor.soft}, 0 12px 28px -4px ${selectedThemeColor.deep}A0`;
+        } else if (isFadedByTheme) {
+          pinBackground = "#F9A48F";
+          pinBoxShadow =
+            "0 0 0 3px #fff, 0 4px 12px -2px rgba(244,117,96,0.2)";
+          pinOpacity = 0.35;
+        } else if (isSelected) {
+          pinBackground = "#1ABFAD";
+          pinBoxShadow =
+            "0 0 0 5px #fff, 0 0 0 9px #1ABFAD, 0 12px 28px -4px rgba(26,191,173,0.5)";
+        } else if (isActive) {
+          pinBackground = isHot ? "#D85A45" : "#F47560";
+          pinBoxShadow =
+            "0 0 0 4px #fff, 0 8px 20px -4px rgba(244,117,96,0.4)";
+        } else {
+          pinBackground = "#F9A48F";
+          pinBoxShadow =
+            "0 0 0 3px #fff, 0 4px 12px -2px rgba(244,117,96,0.25)";
+        }
+
+        // Saturated theme pins hold white text well — same as the
+        // standard coral/teal pins. The earlier pastel-pin scheme
+        // needed dark navy; with saturated solids we're back to white.
+        const pinTextColor = "#FFFFFF";
+
+        // Theme-active pins also get a small size lift so they read
+        // as the focal points; the actively-selected pin still wins.
+        const pinSize = isSelected ? 38 : isInActiveTheme ? 34 : 30;
 
         return (
           <button
@@ -174,32 +224,71 @@ export function EngageMap({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              zIndex: isSelected ? 7 : 6,
+              // Theme-active pins lift above the standard z, even above
+              // the location-selected ring (themes are the current
+              // analytical focal point when they're active).
+              zIndex: isInActiveTheme ? 7 : isSelected ? 6 : 5,
+              opacity: pinOpacity,
+              transition: "opacity 400ms ease",
             }}
           >
-            {/* Pin dot: 30px base; selected scale 1.27 → ~38px total.
-                The hot-zone status reads off color (deep coral for hot,
-                regular coral for active, soft coral for inactive) — the
-                radiating pulse from earlier iterations was distracting. */}
+            {/* Soft atmospheric halo around theme pins. Only fires
+                while a theme is actively driving the highlight; the
+                soft variant of the same colour as the saturated pin
+                body underneath. */}
+            {isInActiveTheme && selectedThemeColor && (
+              <motion.div
+                aria-hidden
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{
+                  scale: [1, 1.45, 1],
+                  opacity: [0.7, 0.25, 0.7],
+                }}
+                transition={{
+                  duration: 2.4,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+                style={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  width: 56,
+                  height: 56,
+                  marginTop: -28,
+                  marginLeft: -28,
+                  borderRadius: "50%",
+                  background: selectedThemeColor.soft,
+                  pointerEvents: "none",
+                  zIndex: 0,
+                }}
+              />
+            )}
+
+            {/* Pin dot. Width animates via CSS transition so the
+                theme-state size lift (30 → 34) feels deliberate
+                without conflicting with framer-motion's hover scale. */}
             <motion.div
+              whileHover={{ scale: 1.06 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
               style={{
                 position: "relative",
-                width: 30,
-                height: 30,
+                width: pinSize,
+                height: pinSize,
                 borderRadius: "50%",
-                background: pinBg,
+                background: pinBackground,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#fff",
+                color: pinTextColor,
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: pinSize >= 38 ? 13 : 12,
                 fontFamily: "var(--font-jetbrains-mono), monospace",
-                boxShadow: pinShadow,
+                boxShadow: pinBoxShadow,
+                transition:
+                  "width 250ms ease, height 250ms ease, background 250ms ease, box-shadow 250ms ease, color 250ms ease",
+                zIndex: 1,
               }}
-              animate={isSelected ? { scale: 1.27 } : { scale: 1 }}
-              whileHover={{ scale: isSelected ? 1.27 : 1.06 }}
-              transition={{ type: "spring", stiffness: 300, damping: 20 }}
             >
               {location.id}
             </motion.div>

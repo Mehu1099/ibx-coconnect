@@ -1,9 +1,11 @@
 "use client";
 
 import { AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { EXPLORE_LOCATIONS } from "@/lib/explore-locations";
+import { getThemeColor } from "@/lib/theme-colors";
 import { useEngageData, type Contribution } from "@/lib/use-engage-data";
+import { useThemes } from "@/lib/use-themes";
 import { EngageHeader } from "./EngageHeader";
 import { EngageMap } from "./EngageMap";
 import { EngageTutorial } from "./EngageTutorial";
@@ -20,7 +22,7 @@ import { VoicesFeed } from "./VoicesFeed";
 export function EngageView() {
   const {
     allContributions,
-    filteredContributions,
+    filteredContributions: locationTypeFiltered,
     locationCounts,
     isLoading,
     selectedLocationId,
@@ -30,8 +32,55 @@ export function EngageView() {
     recentlyArrivedIds,
   } = useEngageData();
 
+  const {
+    themes,
+    concernThemes,
+    visionThemes,
+    latestGeneratedAt,
+    hasThemes,
+  } = useThemes();
+
   const [expandedContribution, setExpandedContribution] =
     useState<Contribution | null>(null);
+  const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
+
+  // Layered filter: useEngageData already handled location + type. Then
+  // we layer the theme filter here, since `themes` lives in EngageView
+  // (not the hook). When a theme is selected we narrow to only its
+  // contribution_ids; otherwise pass through the location-type list.
+  const filteredContributions = useMemo(() => {
+    if (!selectedThemeId) return locationTypeFiltered;
+    const theme = themes.find((t) => t.id === selectedThemeId);
+    if (!theme) return locationTypeFiltered;
+    const ids = new Set(theme.contribution_ids);
+    return locationTypeFiltered.filter((c) =>
+      ids.has(`${c.type}:${c.rawId}`),
+    );
+  }, [locationTypeFiltered, selectedThemeId, themes]);
+
+  // Resolved selected theme + the data the map needs to drive its
+  // pastel signature highlight. Null/empty when no theme is selected,
+  // which the map treats as the default coral-palette state.
+  const selectedTheme = useMemo(
+    () => themes.find((t) => t.id === selectedThemeId) ?? null,
+    [themes, selectedThemeId],
+  );
+
+  const selectedThemeStations = useMemo(
+    () =>
+      selectedTheme
+        ? Object.keys(selectedTheme.station_distribution)
+        : [],
+    [selectedTheme],
+  );
+
+  const selectedThemeColor = useMemo(
+    () =>
+      selectedTheme
+        ? getThemeColor(selectedTheme.name, selectedTheme.kind)
+        : null,
+    [selectedTheme],
+  );
 
   // Three call paths: pin click (passes the id, toggles), map background
   // click (passes "" to clear), or "Clear filters" button on the feed
@@ -47,13 +96,16 @@ export function EngageView() {
   const handleClearFilters = () => {
     setSelectedLocationId(null);
     setSelectedTypes(["all"]);
+    setSelectedThemeId(null);
   };
 
   const totalVoices = allContributions.length;
   const hotZones = locationCounts.filter((l) => l.hot && l.total > 0).length;
   const activeLocations = locationCounts.filter((l) => l.total > 0).length;
   const hasFilter =
-    selectedLocationId !== null || !selectedTypes.includes("all");
+    selectedLocationId !== null ||
+    !selectedTypes.includes("all") ||
+    selectedThemeId !== null;
 
   const expandedLocation = expandedContribution
     ? EXPLORE_LOCATIONS.find((l) => l.id === expandedContribution.locationId)
@@ -153,6 +205,8 @@ export function EngageView() {
         locationCounts={locationCounts}
         selectedLocationId={selectedLocationId}
         onLocationClick={handleLocationClick}
+        selectedThemeStations={selectedThemeStations}
+        selectedThemeColor={selectedThemeColor}
       />
 
       <EngageHeader totalVoices={totalVoices} />
@@ -160,6 +214,13 @@ export function EngageView() {
       <ThemesRail
         contributionCount={filteredContributions.length}
         selectedLocationId={selectedLocationId}
+        concernThemes={concernThemes}
+        visionThemes={visionThemes}
+        hasThemes={hasThemes}
+        latestGeneratedAt={latestGeneratedAt}
+        selectedThemeId={selectedThemeId}
+        onSelectTheme={setSelectedThemeId}
+        allContributions={allContributions}
       />
 
       <VoicesFeed
