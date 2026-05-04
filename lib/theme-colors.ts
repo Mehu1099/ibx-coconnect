@@ -71,3 +71,23 @@ export function getThemeColor(
   const index = hashString(themeName) % palette.length;
   return palette[index];
 }
+
+export function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace("#", "");
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// Pin/row text on a coloured background: navy on light hues
+// (lemon/amber/gold/mustard/chartreuse), white otherwise. YIQ
+// brightness with a 150 threshold tuned against the 24-colour palette.
+export function getContrastTextColor(hex: string): string {
+  const clean = hex.replace("#", "");
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 150 ? "#0B1D3A" : "#FFFFFF";
+}

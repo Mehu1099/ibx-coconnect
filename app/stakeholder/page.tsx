@@ -2,8 +2,8 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { signIn, signUp } from "@/lib/auth";
 import { useAuth } from "@/lib/auth-context";
 
@@ -16,8 +16,38 @@ const FAINT_BORDER = "#E0DCD4";
 
 type Mode = "signin" | "signup";
 
+// Whitelist for the post-auth redirect target. We never push to an arbitrary
+// string from the URL — that's an open-redirect / phishing vector — so the
+// list below is the full set of in-app destinations that callers can pass
+// via `?redirect=`. Anything else falls through to /analyze (the default
+// landing for stakeholders, who are the primary users of this page).
+const ALLOWED_REDIRECTS = new Set([
+  "/analyze",
+  "/engage",
+  "/explore",
+  "/",
+]);
+
+function resolveRedirect(raw: string | null): string {
+  if (!raw) return "/analyze";
+  if (ALLOWED_REDIRECTS.has(raw)) return raw;
+  return "/analyze";
+}
+
 export default function StakeholderAuthPage() {
+  return (
+    <Suspense
+      fallback={<div style={{ minHeight: "100vh", background: CREAM }} />}
+    >
+      <StakeholderAuthForm />
+    </Suspense>
+  );
+}
+
+function StakeholderAuthForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = resolveRedirect(searchParams.get("redirect"));
   const { refresh } = useAuth();
   const [mode, setMode] = useState<Mode>("signin");
   const [isLoading, setIsLoading] = useState(false);
@@ -44,7 +74,7 @@ export default function StakeholderAuthPage() {
     const result = await signIn(signInData.email, signInData.password);
     if (result.success) {
       await refresh();
-      router.push("/?welcome=true");
+      router.push(redirectTo);
     } else {
       setError(result.error);
       setIsLoading(false);
@@ -62,7 +92,7 @@ export default function StakeholderAuthPage() {
     const result = await signUp(signUpData);
     if (result.success) {
       await refresh();
-      router.push("/?welcome=true");
+      router.push(redirectTo);
     } else {
       setError(result.error);
       setIsLoading(false);

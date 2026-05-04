@@ -103,3 +103,7 @@ export const EXPLORE_LOCATIONS: ExploreLocation[] = [
     y: 88.3,
   },
 ];
+
+export function getExploreLocation(id: string): ExploreLocation | undefined {
+  return EXPLORE_LOCATIONS.find((l) => l.id === id);
+}

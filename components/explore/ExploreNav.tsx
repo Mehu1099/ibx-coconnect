@@ -8,7 +8,7 @@ import AuthBadge from "@/components/auth/AuthBadge";
 const NAV_LINKS: { label: string; href: string; active?: boolean }[] = [
   { label: "Explore", href: "/explore", active: true },
   { label: "Engage", href: "/engage" },
-  { label: "Analyze", href: "#" },
+  { label: "Analyze", href: "/analyze" },
 ];
 
 // Clearing the explore session flag on navigation back to "/" means the

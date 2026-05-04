@@ -255,7 +255,7 @@ export default function Home() {
   }, [transitioning, router]);
 
   const handleStakeholderPortal = useCallback(() => {
-    router.push("/stakeholder");
+    router.push("/stakeholder?redirect=/analyze");
   }, [router]);
 
   // ── Measure viewport ──────────────────────────────────────────────────────
