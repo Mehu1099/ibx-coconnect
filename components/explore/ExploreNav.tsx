@@ -2,8 +2,10 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AuthBadge from "@/components/auth/AuthBadge";
+import { useAuth } from "@/lib/auth-context";
+import { userHasContributions } from "@/lib/explore/userHasContributions";
 
 const NAV_LINKS: { label: string; href: string; active?: boolean }[] = [
   { label: "Explore", href: "/explore", active: true },
@@ -24,6 +26,22 @@ function clearExploreAnimatedFlag() {
 
 export default function ExploreNav() {
   const [titleHovered, setTitleHovered] = useState(false);
+  const { user, isLoading } = useAuth();
+  const [hasContributions, setHasContributions] = useState(false);
+
+  // Persistent "you have voices in this corridor" indicator. Sticky
+  // once true; the helper has its own dedupe so this query coexists
+  // cleanly with the toast's check on the /explore page.
+  useEffect(() => {
+    if (isLoading) return;
+    let cancelled = false;
+    void userHasContributions(user?.id ?? null).then((ok) => {
+      if (!cancelled) setHasContributions(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoading, user?.id]);
 
   return (
     <nav
@@ -63,31 +81,53 @@ export default function ExploreNav() {
         animate={{ opacity: 1 }}
         transition={{ delay: 1.5, duration: 0.4, ease: "easeOut" }}
       >
-        {NAV_LINKS.map((link) => (
-          <a
-            key={link.label}
-            href={link.href}
-            className="relative text-[14px] transition-colors"
-            style={{
-              fontFamily: "var(--font-space-grotesk)",
-              color: link.active ? "#0B1D3A" : "#8899AA",
-              fontWeight: link.active ? 600 : 500,
-            }}
-          >
-            {link.label}
-            {link.active && (
-              <span
-                className="absolute left-1/2 -translate-x-1/2 block rounded-full"
-                style={{
-                  width: 4,
-                  height: 4,
-                  background: "#1ABFAD",
-                  bottom: -8,
-                }}
-              />
-            )}
-          </a>
-        ))}
+        {NAV_LINKS.map((link) => {
+          const showContribDot =
+            link.label === "Engage" && hasContributions;
+          return (
+            <a
+              key={link.label}
+              href={link.href}
+              aria-label={
+                showContribDot
+                  ? "Engage (you have contributed)"
+                  : undefined
+              }
+              className="relative text-[14px] transition-colors"
+              style={{
+                fontFamily: "var(--font-space-grotesk)",
+                color: link.active ? "#0B1D3A" : "#8899AA",
+                fontWeight: link.active ? 600 : 500,
+              }}
+            >
+              {link.label}
+              {link.active && (
+                <span
+                  className="absolute left-1/2 -translate-x-1/2 block rounded-full"
+                  style={{
+                    width: 4,
+                    height: 4,
+                    background: "#1ABFAD",
+                    bottom: -8,
+                  }}
+                />
+              )}
+              {showContribDot && (
+                <span
+                  aria-hidden
+                  className="absolute block rounded-full"
+                  style={{
+                    width: 6,
+                    height: 6,
+                    background: "#F47560",
+                    top: -3,
+                    right: -8,
+                  }}
+                />
+              )}
+            </a>
+          );
+        })}
 
         <AuthBadge variant="light" />
       </motion.div>

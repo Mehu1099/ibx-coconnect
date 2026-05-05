@@ -3,11 +3,14 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import EngageNudgeToast from "@/components/explore/EngageNudgeToast";
 import ExploreNav from "@/components/explore/ExploreNav";
 import IBXLineAnimation from "@/components/explore/IBXLineAnimation";
 import LocationPin from "@/components/explore/LocationPin";
 import PinAdminTool from "@/components/explore/PinAdminTool";
 import WelcomeText from "@/components/explore/WelcomeText";
+import { useExploreVisitCount } from "@/hooks/useExploreVisitCount";
+import { useAuth } from "@/lib/auth-context";
 import {
   AXONOMETRIC_NATURAL_HEIGHT,
   AXONOMETRIC_NATURAL_WIDTH,
@@ -15,6 +18,7 @@ import {
   IBX_ROUTE_WAYPOINTS,
   type ExploreLocation,
 } from "@/lib/explore-locations";
+import { userHasContributions } from "@/lib/explore/userHasContributions";
 import { useImageProjection } from "@/lib/use-image-projection";
 import { useRealtimeConcernCounts } from "@/lib/use-realtime-concerns";
 
@@ -42,6 +46,20 @@ export default function ExplorePage() {
   const concernCounts = useRealtimeConcernCounts();
   const [isMobilePortrait, setIsMobilePortrait] = useState(false);
   const router = useRouter();
+
+  const { user, isLoading: authLoading } = useAuth();
+  const visitCount = useExploreVisitCount();
+  const [hasContributionsPromise, setHasContributionsPromise] =
+    useState<Promise<boolean> | null>(null);
+
+  // Kick off the contribution check once auth has resolved. Stored
+  // as a single promise so the toast (and any future consumer) reads
+  // the same in-flight result without re-querying on each render.
+  useEffect(() => {
+    if (authLoading) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bridges the async auth subsystem into React state; the helper is the external system being synchronized
+    setHasContributionsPromise(userHasContributions(user?.id ?? null));
+  }, [authLoading, user?.id]);
 
   useEffect(() => {
     let skip = false;
@@ -215,6 +233,11 @@ export default function ExplorePage() {
       />
 
       <ExploreNav />
+
+      <EngageNudgeToast
+        visitCount={visitCount}
+        hasContributionsPromise={hasContributionsPromise}
+      />
 
       {mounted && <WelcomeText instant={instant} isMobilePortrait={isMobilePortrait} />}
 
