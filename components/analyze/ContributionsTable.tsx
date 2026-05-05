@@ -13,6 +13,12 @@ interface Props {
   contributions: Contribution[];
   themes: Theme[];
   isLoading: boolean;
+  search: string;
+  onSearchChange: (value: string) => void;
+  filterType: string;
+  onFilterTypeChange: (value: string) => void;
+  filterLocation: string;
+  onFilterLocationChange: (value: string) => void;
 }
 
 type SortKey = "location" | "type" | "role" | "age" | "when";
@@ -36,12 +42,15 @@ export default function ContributionsTable({
   contributions,
   themes,
   isLoading,
+  search,
+  onSearchChange,
+  filterType,
+  onFilterTypeChange,
+  filterLocation,
+  onFilterLocationChange,
 }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("when");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-  const [filterType, setFilterType] = useState<string>("all");
-  const [filterLocation, setFilterLocation] = useState<string>("all");
-  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<EvidenceContribution | null>(null);
 
   // Themes carry contribution_ids in `${type}:${rawId}` format; building
@@ -164,7 +173,7 @@ export default function ContributionsTable({
         <input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search content or role…"
           style={{
             padding: "6px 10px",
@@ -179,7 +188,7 @@ export default function ContributionsTable({
 
         <select
           value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
+          onChange={(e) => onFilterTypeChange(e.target.value)}
           style={{
             padding: "6px 10px",
             background: "rgba(11,29,58,0.04)",
@@ -198,7 +207,7 @@ export default function ContributionsTable({
 
         <select
           value={filterLocation}
-          onChange={(e) => setFilterLocation(e.target.value)}
+          onChange={(e) => onFilterLocationChange(e.target.value)}
           style={{
             padding: "6px 10px",
             background: "rgba(11,29,58,0.04)",

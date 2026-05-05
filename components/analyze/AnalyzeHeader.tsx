@@ -263,6 +263,39 @@ export default function AnalyzeHeader({
       >
         <button
           onClick={() =>
+            document
+              .getElementById("panel-export")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+          type="button"
+          className="analyze-export-link"
+          style={{
+            padding: "6px 10px",
+            background: "transparent",
+            color: "rgba(11,29,58,0.7)",
+            border: "none",
+            fontFamily: "var(--font-jetbrains-mono), monospace",
+            fontSize: 10.5,
+            fontWeight: 600,
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            cursor: "pointer",
+            transition: "color 150ms",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "#0B1D3A";
+            e.currentTarget.style.textDecoration = "underline";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "rgba(11,29,58,0.7)";
+            e.currentTarget.style.textDecoration = "none";
+          }}
+        >
+          ↓ Export
+        </button>
+
+        <button
+          onClick={() =>
             window.dispatchEvent(new Event(ANALYZE_TUTORIAL_OPEN_EVENT))
           }
           type="button"

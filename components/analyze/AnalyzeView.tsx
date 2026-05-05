@@ -8,12 +8,13 @@ import { useAuth } from "@/lib/auth-context";
 import { EXPLORE_LOCATIONS } from "@/lib/explore-locations";
 import { useEngageData } from "@/lib/use-engage-data";
 import { useThemeStatuses } from "@/lib/use-theme-statuses";
-import { useThemes } from "@/lib/use-themes";
+import { type Theme, useThemes } from "@/lib/use-themes";
 import AnalyzeHeader, { type StatusFilter } from "./AnalyzeHeader";
 import AnalyzeLoadingScreen from "./AnalyzeLoadingScreen";
 import AnalyzeTutorial from "./AnalyzeTutorial";
 import ContributionsTable from "./ContributionsTable";
 import DemographicMatrix from "./DemographicMatrix";
+import ExportPanel from "./ExportPanel";
 import SpatialDensityPanel from "./SpatialDensityPanel";
 import SplashAnimation from "./SplashAnimation";
 import ThemeStatusBoard from "./ThemeStatusBoard";
@@ -22,7 +23,7 @@ export default function AnalyzeView() {
   const router = useRouter();
   const { isLoading: authLoading, isStakeholder } = useAuth();
 
-  const { themes, latestGeneratedAt } = useThemes();
+  const { themes, latestGeneratedAt, latestGenerationId } = useThemes();
   const { getStatus, setStatus } = useThemeStatuses();
   const { allContributions, isLoading: contributionsLoading } = useEngageData();
 
@@ -39,6 +40,72 @@ export default function AnalyzeView() {
 
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [tableSearch, setTableSearch] = useState("");
+  const [tableFilterType, setTableFilterType] = useState("all");
+  const [tableFilterLocation, setTableFilterLocation] = useState("all");
+
+  // Enrich each contribution with its themes via the canonical
+  // ${type}:${rawId} key. Computed once here so ContributionsTable, the
+  // export, and any future consumer share the same enriched list.
+  const enrichedContributions = useMemo(() => {
+    const themesByCid = new Map<string, Theme[]>();
+    themes.forEach((t) => {
+      t.contribution_ids.forEach((cid) => {
+        const arr = themesByCid.get(cid) ?? [];
+        arr.push(t);
+        themesByCid.set(cid, arr);
+      });
+    });
+    return allContributions.map((c) => ({
+      ...c,
+      themes: themesByCid.get(`${c.type}:${c.rawId}`) ?? [],
+    }));
+  }, [allContributions, themes]);
+
+  // What gets exported — applies all five filters (table search/type/
+  // location plus page-level status chip and selected theme). The CSV
+  // is intentionally narrower than the visible table when status or a
+  // theme is active.
+  const exportContributions = useMemo(() => {
+    let list = enrichedContributions;
+    if (tableFilterType !== "all")
+      list = list.filter((c) => c.type === tableFilterType);
+    if (tableFilterLocation !== "all")
+      list = list.filter((c) => c.locationId === tableFilterLocation);
+    if (tableSearch) {
+      const q = tableSearch.toLowerCase();
+      list = list.filter(
+        (c) =>
+          c.content.toLowerCase().includes(q) ||
+          c.contributorRole.toLowerCase().includes(q),
+      );
+    }
+    if (statusFilter !== "all") {
+      list = list.filter((c) =>
+        c.themes.some((t) => getStatus(t.id) === statusFilter),
+      );
+    }
+    if (selectedThemeId) {
+      list = list.filter((c) =>
+        c.themes.some((t) => t.id === selectedThemeId),
+      );
+    }
+    return list;
+  }, [
+    enrichedContributions,
+    tableSearch,
+    tableFilterType,
+    tableFilterLocation,
+    statusFilter,
+    selectedThemeId,
+    getStatus,
+  ]);
+
+  const exportThemes = useMemo(() => {
+    if (statusFilter === "all") return themes;
+    return themes.filter((t) => getStatus(t.id) === statusFilter);
+  }, [themes, statusFilter, getStatus]);
+
   const [loadingComplete, setLoadingComplete] = useState(() => {
     if (typeof window === "undefined") return true;
     try {
@@ -409,6 +476,25 @@ export default function AnalyzeView() {
           contributions={allContributions}
           themes={themes}
           isLoading={contributionsLoading}
+          search={tableSearch}
+          onSearchChange={setTableSearch}
+          filterType={tableFilterType}
+          onFilterTypeChange={setTableFilterType}
+          filterLocation={tableFilterLocation}
+          onFilterLocationChange={setTableFilterLocation}
+        />
+
+        <ExportPanel
+          exportContributions={exportContributions}
+          exportThemes={exportThemes}
+          getStatus={getStatus}
+          statusFilter={statusFilter}
+          selectedThemeId={selectedThemeId}
+          tableSearch={tableSearch}
+          tableFilterType={tableFilterType}
+          tableFilterLocation={tableFilterLocation}
+          latestGenerationId={latestGenerationId}
+          locations={EXPLORE_LOCATIONS}
         />
       </main>
 
