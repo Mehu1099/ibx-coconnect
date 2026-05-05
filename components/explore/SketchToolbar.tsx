@@ -66,7 +66,7 @@ export default function SketchToolbar({
             bottom: 110,
             left: "50%",
             translateX: "-50%",
-            zIndex: Z_INDEX.passive.floating_toolbar,
+            zIndex: Z_INDEX.passive.sketch_toolbar,
             background: "rgba(255, 255, 255, 0.96)",
             borderRadius: 14,
             padding: "8px 12px",

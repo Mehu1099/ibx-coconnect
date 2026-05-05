@@ -168,7 +168,9 @@ export default function SketchCanvas({
         inset: 0,
         width: "100%",
         height: "100%",
-        zIndex: isActive ? Z_INDEX.markers.sketch : Z_INDEX.passive.sketch_inactive,
+        zIndex: isActive
+          ? Z_INDEX.passive.sketch_active
+          : Z_INDEX.passive.sketch_inactive,
         pointerEvents: isActive ? "auto" : "none",
         // Hide the system cursor in erase mode — the rendered indicator
         // becomes the cursor, so the user sees the exact footprint of

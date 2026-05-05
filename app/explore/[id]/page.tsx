@@ -239,6 +239,25 @@ export default function LocationPage() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
+  // Escape deactivates the active tool. Pairs with clicking the same
+  // tool icon again — both routes drop the user back to "viewing" mode
+  // so the tool can never get stuck. Also clears any pending composer
+  // so the photo isn't left in a half-committed state.
+  useEffect(() => {
+    if (!activeTool && !pendingNote && !pendingConcern) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (pendingNote) setPendingNote(null);
+      else if (pendingConcern) setPendingConcern(null);
+      else if (activeTool) {
+        setActiveTool(null);
+        setIsErasing(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeTool, pendingNote, pendingConcern]);
+
   // ── Visibility toggle ─────────────────────────────────────────────────────
 
   const handleToggleVisibility = useCallback(() => {

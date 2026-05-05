@@ -24,11 +24,17 @@ export default function SubmitContributionsButton({ count, onClick }: Props) {
           // `transform: translateX(-50%)` here would get clobbered
           // every time motion writes its own transform for `y`,
           // leaving the button visibly off-centre.
+          // pointerEvents: "none" on the wrapper so the wrapper itself
+          // (and its aura sibling) never swallow clicks — only the
+          // visible button below captures them. Without this, the
+          // wrapper's bounding box could intercept clicks meant for
+          // the floating toolbar that sits just below it.
           style={{
             bottom: 110,
             left: "50%",
             x: "-50%",
-            zIndex: Z_INDEX.passive.floating_toolbar,
+            zIndex: Z_INDEX.passive.submit_pill,
+            pointerEvents: "none",
           }}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -73,6 +79,7 @@ export default function SubmitContributionsButton({ count, onClick }: Props) {
               letterSpacing: "0.2px",
               lineHeight: 1,
               boxShadow: "0 4px 20px rgba(244, 117, 96, 0.40)",
+              pointerEvents: "auto",
             }}
             whileHover={{
               scale: 1.05,

@@ -23,7 +23,7 @@ export default function PersonalCanvasHint({ show }: Props) {
         bottom: 110,
         left: "50%",
         x: "-50%",
-        zIndex: Z_INDEX.passive.floating_toolbar,
+        zIndex: Z_INDEX.passive.personal_canvas_hint,
         background: "rgba(245, 242, 235, 0.96)",
         border: "1px solid rgba(244, 117, 96, 0.3)",
         padding: "8px 16px",
